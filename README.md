@@ -1,98 +1,88 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# NestJS Project
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend application built with NestJS framework.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## 📂 Project Structure
 
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
-
-```bash
-$ yarn install
+```
+src/
+├── config/             # Configuration module
+│   ├── config.module.ts
+│   └── config.ts
+├── user/               # User module (CRUD)
+│   ├── user.controller.spec.ts
+│   ├── user.controller.ts
+│   └── user.module.ts
+├── app.module.ts       # Root module
+└── main.ts             # Entry point
+test/                   # E2E tests
 ```
 
-## Compile and run the project
+## 🏗 Architecture Justification
 
-```bash
-# development
-$ yarn run start
+This project is built on NestJS, which provides an out-of-the-box application architecture inspired by Angular.
+Unlike unopinionated frameworks (like Express), Nest enforces a structure that promotes best practices, enabling the creation of highly testable, scalable, loosely coupled, and easily maintainable applications.
+The architecture is based on the "First Steps" guide and best practices for modular applications.
 
-# watch mode
-$ yarn run start:dev
+### Key Architectural Principles
 
-# production mode
-$ yarn run start:prod
-```
+- **Modular (Scalable):** The application is structured into Modules. Each module encapsulates a specific domain or feature (e.g., `ConfigModule`, `UserModule`). This logical separation allows the application to scale horizontally; features can be easily extracted into microservices or reused across different parts of the system without tight entanglements.
 
-## Run tests
+- **Loosely Coupled (Dependency Injection):** NestJS uses a powerful Dependency Injection (DI) system. Instead of hard-coding dependencies (e.g., `const service = new UserService()`), classes request what they need through their constructors. The Nest runtime (IoC Container) manages the instantiation. This ensures that components do not depend on concrete implementations but rather on interfaces or tokens.
 
-```bash
-# unit tests
-$ yarn run test
+- **Highly Testable:** Because of the loose coupling provided by DI, testing becomes straightforward. When writing unit tests, we can easily swap out real database connections or external API services with mock objects. We can test the business logic of a Controller or Service in isolation without spinning up the entire application context.
 
-# e2e tests
-$ yarn run test:e2e
+- **Maintainable:** Nest imposes a strict directory structure and separates concerns using dedicated components: Controllers (handling requests), Services (business logic), Pipes (validation), Guards (authorization), and Interceptors (response mapping). This standardization means any developer familiar with Nest can immediately navigate the codebase, reducing technical debt over time.
 
-# test coverage
-$ yarn run test:cov
-```
+### 1. Modular Design
 
-## Deployment
+Following NestJS philosophy, the application is structured into modules. Each logical part of the domain is encapsulated in its own directory:
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+- **AppModule** - the root module that assembles all feature modules.
+- **ConfigModule** - located in `src/config`, this module handles environment variables (via `.env`), ensuring a centralized configuration strategy.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### 2. User Module & CRUD Integration
 
-```bash
-$ yarn install -g @nestjs/mau
-$ mau deploy
-```
+As per the assignment requirements and lecture notes, a specific User Module has been integrated (`src/user/`).
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+- **user.module.ts** - organizes the dependency injection context for the user feature.
+- **user.controller.ts** - handles incoming HTTP requests and returns responses.
+  - It implements full CRUD (Create, Read, Update, Delete) functionality.
+  - It utilizes standard decorators (`@Get`, `@Post`, `@Put`, `@Delete`, `@Body`, `@Param`) strictly following the Controllers documentation.
+- **user.controller.spec.ts** - contains unit tests for the controller, ensuring code reliability.
 
-## Resources
+### 3. Entry Point
 
-Check out a few resources that may come in handy when working with NestJS:
+The `main.ts` file utilizes `NestFactory` to create the application instance. This is the standard entry point where global pipes, validation, and the listening port are configured.
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+### 4. Testing
 
-## Support
+The structure includes a `test/` directory for End-to-End (E2E) testing (`app.e2e-spec.ts`), allowing for verification of the API routes from an external perspective.
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+## 🚀 Getting Started
 
-## Stay in touch
+Ensure you have Node.js (version specified in `.nvmrc`) and Yarn installed.
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+1. Install dependencies:
 
-## License
+   ```bash
+   yarn install
+   ```
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+2. Environment Setup. Create a `.env` file based on the example:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+3. Run the application (Development mode):
+
+   ```bash
+   yarn start:dev
+   ```
+
+## 📚 References
+
+- [NestJS Documentation: First Steps](https://docs.nestjs.com/first-steps)
+- [NestJS Controllers](https://docs.nestjs.com/controllers)
+- [NestJS Modules](https://docs.nestjs.com/modules)
