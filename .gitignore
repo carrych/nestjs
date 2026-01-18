@@ -1,0 +1,14 @@
+# Yarn
+.yarn/
+node_modules/
+
+# Build output
+dist/
+
+# IDE
+.idea/
+.vscode/
+
+# Environment
+.env*
+!.env.example
