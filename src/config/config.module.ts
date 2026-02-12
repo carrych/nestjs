@@ -9,12 +9,12 @@ export const APP_CONFIG = Symbol('APP_CONFIG');
 
 function validate(config: Record<string, unknown>): Config {
   const mapped = {
-    postgres: {
-      connection: config.POSTGRES_CONNECTION,
-      pool: {
-        min: Number(config.POSTGRES_POOL_MIN),
-        max: Number(config.POSTGRES_POOL_MAX),
-      },
+    database: {
+      host: config.DB_HOST,
+      port: Number(config.DB_PORT),
+      user: config.DB_USER,
+      password: config.DB_PASSWORD,
+      name: config.DB_NAME,
     },
   };
 
@@ -32,6 +32,7 @@ function validate(config: Record<string, unknown>): Config {
 @Module({
   imports: [
     NestConfigModule.forRoot({
+      isGlobal: true,
       validate,
     }),
   ],
@@ -39,7 +40,7 @@ function validate(config: Record<string, unknown>): Config {
     {
       provide: APP_CONFIG,
       useFactory: (configService: ConfigService<Config, true>) => ({
-        postgres: configService.get('postgres', { infer: true }),
+        database: configService.get('database', { infer: true }),
       }),
       inject: [ConfigService],
     },

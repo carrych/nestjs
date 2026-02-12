@@ -1,25 +1,25 @@
 import { Type } from 'class-transformer';
 import { IsNumber, IsString, ValidateNested } from 'class-validator';
 
-class PoolConfig {
-  @IsNumber()
-  min: number;
-
-  @IsNumber()
-  max: number;
-}
-
-class PostgresConfig {
+class DatabaseConfig {
   @IsString()
-  connection: string;
+  host: string;
 
-  @ValidateNested()
-  @Type(() => PoolConfig)
-  pool: PoolConfig;
+  @IsNumber()
+  port: number;
+
+  @IsString()
+  user: string;
+
+  @IsString()
+  password: string;
+
+  @IsString()
+  name: string;
 }
 
 export class Config {
   @ValidateNested()
-  @Type(() => PostgresConfig)
-  postgres: PostgresConfig;
+  @Type(() => DatabaseConfig)
+  database: DatabaseConfig;
 }
