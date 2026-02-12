@@ -76,7 +76,7 @@ export class OrdersService {
         .getRepository(Stock)
         .createQueryBuilder('stock')
         .where('stock.product_id IN (:...productIds)', { productIds })
-        .setLock('pessimistic_write_or_fail')
+        .setLock('pessimistic_write')
         .getMany();
 
       const stockByProductId = new Map(

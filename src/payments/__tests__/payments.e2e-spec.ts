@@ -45,7 +45,7 @@ describe('PaymentsController (e2e)', () => {
         userId: 500,
         items: [{ productId: 5, amount: 1, price: 4299 }],
       });
-    return res.body.id;
+    return Number(res.body.id);
   }
 
   // ---------------------------------------------------------------

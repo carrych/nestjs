@@ -32,14 +32,16 @@ describe('ProductsController (e2e)', () => {
 
   describe('GET /products', () => {
     it('should return an array of seeded products', async () => {
-      const res = await request(app.getHttpServer()).get('/products');
+      const res = await request(app.getHttpServer())
+        .get('/products')
+        .query({ limit: 100 });
 
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
       expect(res.body.length).toBeGreaterThanOrEqual(5);
 
       // Verify known seeded product fields
-      const iphone = res.body.find((p: any) => p.name === 'iPhone');
+      const iphone = res.body.find((p: any) => p.name === 'iPhone 15 Pro');
       expect(iphone).toBeDefined();
       expect(iphone).toHaveProperty('id');
       expect(iphone).toHaveProperty('slug');

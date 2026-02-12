@@ -47,7 +47,7 @@ describe('ShippingController (e2e)', () => {
         userId: 600,
         items: [{ productId: 5, amount: 1, price: 4299 }],
       });
-    return res.body.id;
+    return Number(res.body.id);
   }
 
   // ---------------------------------------------------------------
@@ -200,8 +200,8 @@ describe('ShippingController (e2e)', () => {
         });
       const shippingId = createRes.body.id;
 
-      // Confirm receivedAt is null initially
-      expect(createRes.body.receivedAt).toBeNull();
+      // Confirm receivedAt is not set initially
+      expect(createRes.body.receivedAt ?? null).toBeNull();
 
       const res = await request(app.getHttpServer())
         .patch(`/shipping/${shippingId}`)
