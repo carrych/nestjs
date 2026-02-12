@@ -111,10 +111,10 @@ export class NovaPoshtaService {
     const doc = await this.createInternetDocument(documentDTO);
 
     return {
-      trackingNumber: doc.intDocNumber,
-      documentId: doc.ref,
-      estimatedDeliveryDate: doc.estimatedDeliveryDate || '',
-      shippingCost: doc.costOnSite ? Number(doc.costOnSite) : 0,
+      trackingNumber: doc.IntDocNumber,
+      documentId: doc.Ref,
+      estimatedDeliveryDate: doc.EstimatedDeliveryDate || '',
+      shippingCost: doc.CostOnSite ? Number(doc.CostOnSite) : 0,
     };
   }
 
