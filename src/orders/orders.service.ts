@@ -169,13 +169,8 @@ export class OrdersService {
   }
 
   async findAll(query: QueryOrderDto): Promise<Order[]> {
-    const { limit = 10, offset = 0, status, userId, dateFrom, dateTo } = query;
-    const where: Record<string, unknown> = {};
-
-    if (status) where.status = status;
-    if (userId) where.userId = userId;
-    if (dateFrom) where.createdAt = MoreThanOrEqual(new Date(dateFrom));
-    if (dateTo) where.createdAt = LessThanOrEqual(new Date(dateTo));
+    const where = this.buildWhere(query);
+    const { limit = 10, offset = 0 } = query;
 
     return this.orderRepository.find({
       where,
@@ -184,6 +179,31 @@ export class OrdersService {
       take: limit,
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async findAllWithCount(query: QueryOrderDto): Promise<[Order[], number]> {
+    const where = this.buildWhere(query);
+    const { limit = 10, offset = 0 } = query;
+
+    return this.orderRepository.findAndCount({
+      where,
+      relations: { items: true },
+      skip: offset,
+      take: limit,
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  private buildWhere(query: QueryOrderDto): Record<string, unknown> {
+    const { status, userId, dateFrom, dateTo } = query;
+    const where: Record<string, unknown> = {};
+
+    if (status) where.status = status;
+    if (userId) where.userId = userId;
+    if (dateFrom) where.createdAt = MoreThanOrEqual(new Date(dateFrom));
+    if (dateTo) where.createdAt = LessThanOrEqual(new Date(dateTo));
+
+    return where;
   }
 
   async findOne(id: number): Promise<Order> {

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, Repository } from 'typeorm';
+import { ILike, In, Repository } from 'typeorm';
 
 import { Product } from './entities/product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -37,6 +37,10 @@ export class ProductsService {
       take: limit,
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async findByIds(ids: number[]): Promise<Product[]> {
+    return this.productRepository.find({ where: { id: In(ids) } });
   }
 
   async findOne(id: number): Promise<Product> {
