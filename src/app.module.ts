@@ -13,6 +13,11 @@ import { ShippingModule } from './shipping/shipping.module';
 import { StocksModule } from './stocks/stocks.module';
 import { UserModule } from './user/user.module';
 import { GraphqlOrdersModule } from './graphql/orders/graphql-orders.module';
+import { GraphqlProductsModule } from './graphql/products/graphql-products.module';
+import { GraphqlPaymentsModule } from './graphql/payments/graphql-payments.module';
+import { GraphqlShippingModule } from './graphql/shipping/graphql-shipping.module';
+import { GraphqlStocksModule } from './graphql/stocks/graphql-stocks.module';
+import { GraphqlUsersModule } from './graphql/users/graphql-users.module';
 
 @Module({
   imports: [
@@ -43,6 +48,11 @@ import { GraphqlOrdersModule } from './graphql/orders/graphql-orders.module';
     ShippingModule,
     StocksModule,
     GraphqlOrdersModule,
+    GraphqlProductsModule,
+    GraphqlPaymentsModule,
+    GraphqlShippingModule,
+    GraphqlStocksModule,
+    GraphqlUsersModule,
   ],
 })
 export class AppModule {}
