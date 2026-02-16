@@ -51,6 +51,23 @@ export class ShippingService {
     });
   }
 
+  async findAllWithCount(
+    orderId?: number,
+    limit = 10,
+    offset = 0,
+  ): Promise<[Shipping[], number]> {
+    const where: Record<string, unknown> = {};
+    if (orderId) where.orderId = orderId;
+
+    return this.shippingRepository.findAndCount({
+      where,
+      relations: { order: true },
+      skip: offset,
+      take: limit,
+      order: { createdAt: 'DESC' },
+    });
+  }
+
   async findOne(id: number): Promise<Shipping> {
     const shipping = await this.shippingRepository.findOne({
       where: { id },

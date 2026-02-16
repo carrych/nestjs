@@ -25,11 +25,8 @@ export class ProductsService {
   }
 
   async findAll(query: QueryProductDto): Promise<Product[]> {
-    const { limit = 10, offset = 0, brand, search } = query;
-    const where: Record<string, unknown> = {};
-
-    if (brand) where.brand = brand;
-    if (search) where.name = ILike(`%${search}%`);
+    const where = this.buildWhere(query);
+    const { limit = 10, offset = 0 } = query;
 
     return this.productRepository.find({
       where,
@@ -39,8 +36,30 @@ export class ProductsService {
     });
   }
 
+  async findAllWithCount(query: QueryProductDto): Promise<[Product[], number]> {
+    const where = this.buildWhere(query);
+    const { limit = 10, offset = 0 } = query;
+
+    return this.productRepository.findAndCount({
+      where,
+      skip: offset,
+      take: limit,
+      order: { createdAt: 'DESC' },
+    });
+  }
+
   async findByIds(ids: number[]): Promise<Product[]> {
     return this.productRepository.find({ where: { id: In(ids) } });
+  }
+
+  private buildWhere(query: QueryProductDto): Record<string, unknown> {
+    const { brand, search } = query;
+    const where: Record<string, unknown> = {};
+
+    if (brand) where.brand = brand;
+    if (search) where.name = ILike(`%${search}%`);
+
+    return where;
   }
 
   async findOne(id: number): Promise<Product> {
