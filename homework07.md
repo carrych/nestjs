@@ -31,6 +31,10 @@ Resolvers are thin — they delegate entirely to existing services:
 
 `ProductLoader` is request-scoped (`Scope.REQUEST`). It batches all `productId` lookups within a single GraphQL request into one `SELECT ... WHERE id IN (...)` query via `ProductsService.findByIds()`.
 
+## Additional GraphQL APIs
+
+Following the same pattern as Orders, GraphQL APIs were added for the remaining entities: **Products**, **Payments**, **Shipping**, **Stocks**, **Users**. Each module includes types, connection-based pagination, filter inputs, and a resolver delegating to the corresponding service.
+
 ## Error Handling
 
 - Invalid filter/pagination values → GraphQL validation error (class-validator via `ValidationPipe`)
