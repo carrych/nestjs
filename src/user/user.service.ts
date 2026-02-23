@@ -1,79 +1,64 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import * as bcrypt from 'bcrypt';
 
+import { User } from './entities/user.entity';
+import { UserRole } from './enums/user-role.enum';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { User, UserWithoutPassword } from './interfaces/user.interface';
 
 @Injectable()
 export class UserService {
-  private users: User[] = [
-    {
-      id: 1,
-      email: 'john@example.com',
-      username: 'john_doe',
-      password: 'hashed_password_1',
-      metadata: { role: 'admin', verified: true },
-    },
-    {
-      id: 2,
-      email: 'jane@example.com',
-      username: 'jane_smith',
-      password: 'hashed_password_2',
-      metadata: { role: 'user', verified: true, preferences: { theme: 'dark' } },
-    },
-    {
-      id: 3,
-      email: 'bob@example.com',
-      username: 'bob_wilson',
-      password: 'hashed_password_3',
-      metadata: { role: 'user', verified: false },
-    },
-  ];
+  constructor(
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+  ) {}
 
-  private nextId = 4;
-
-  findAll(page: number, limit: number): UserWithoutPassword[] {
-    const start = (page - 1) * limit;
-    return this.users.slice(start, start + limit).map(this.excludePassword);
+  async findAll(page: number, limit: number): Promise<User[]> {
+    const take = Math.max(1, Math.min(limit, 100));
+    const skip = (page - 1) * take;
+    return this.userRepository.find({ skip, take, order: { id: 'ASC' } });
   }
 
-  findOne(id: number): UserWithoutPassword {
-    const user = this.users.find((u) => u.id === id);
-    if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found`);
-    }
-    return this.excludePassword(user);
-  }
-  // TODO: Implement user creation, updating, password hashing, and deletion methods when postgres will be used.
-  create(createUserDto: CreateUserDto): string {
-    // TODO: Hash password with argon2
-    // const hashedPassword = await argon2.hash(createUserDto.password);
-
-    return `User created successfully`;
+  async findOne(id: number): Promise<User> {
+    const user = await this.userRepository.findOne({ where: { id } });
+    if (!user) throw new NotFoundException(`User #${id} not found`);
+    return user;
   }
 
-  update(id: number, updateUserDto: UpdateUserDto): string {
-    return `User with ID ${id} updated successfully`;
+  async findByEmail(email: string): Promise<User | null> {
+    return this.userRepository
+      .createQueryBuilder('user')
+      .addSelect('user.password_hash')
+      .where('user.email = :email', { email })
+      .getOne();
   }
 
-  updatePassword(id: number, password: string): string {
-    const userIndex = this.users.findIndex((u) => u.id === id);
-    if (userIndex === -1) {
-      throw new NotFoundException(`User with ID ${id} not found`);
-    }
-
-    // TODO: Hash password with argon2
-    // const hashedPassword = await argon2.hash(password);
-
-    return `Password for user ID ${id} updated successfully`;
+  async create(dto: CreateUserDto): Promise<User> {
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const user = this.userRepository.create({
+      email: dto.email,
+      passwordHash,
+      role: UserRole.USER,
+    });
+    return this.userRepository.save(user);
   }
 
-  remove(id: number): string {
-    return `User with ID ${id} deleted successfully`;
+  async update(id: number, dto: UpdateUserDto): Promise<User> {
+    const user = await this.findOne(id);
+    Object.assign(user, dto);
+    return this.userRepository.save(user);
   }
 
-  private excludePassword(user: User): UserWithoutPassword {
-    const { password: _, ...userWithoutPassword } = user;
-    return userWithoutPassword;
+  async updatePassword(id: number, password: string): Promise<void> {
+    await this.findOne(id);
+    const passwordHash = await bcrypt.hash(password, 12);
+    await this.userRepository.update(id, { passwordHash });
+  }
+
+  async remove(id: number): Promise<void> {
+    const user = await this.findOne(id);
+    await this.userRepository.remove(user);
   }
 }
