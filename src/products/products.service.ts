@@ -6,12 +6,16 @@ import { Product } from './entities/product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { QueryProductDto } from './dto/query-product.dto';
+import { StorageService } from '../files/services/storage.service';
+
+export type ProductWithImageUrl = Product & { imageUrl: string | null };
 
 @Injectable()
 export class ProductsService {
   constructor(
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
+    private readonly storageService: StorageService,
   ) {}
 
   async create(dto: CreateProductDto): Promise<Product> {
@@ -62,12 +66,22 @@ export class ProductsService {
     return where;
   }
 
-  async findOne(id: number): Promise<Product> {
+  async findOne(id: number): Promise<ProductWithImageUrl> {
     const product = await this.productRepository.findOne({ where: { id } });
     if (!product) {
       throw new NotFoundException(`Product #${id} not found`);
     }
-    return product;
+
+    let imageUrl: string | null = null;
+    if (product.imageFileId) {
+      const [row] = await this.productRepository.query(
+        `SELECT key FROM files WHERE id = $1`,
+        [product.imageFileId],
+      );
+      if (row) imageUrl = this.storageService.getViewUrl(row.key as string);
+    }
+
+    return { ...product, imageUrl };
   }
 
   async update(id: number, dto: UpdateProductDto): Promise<Product> {

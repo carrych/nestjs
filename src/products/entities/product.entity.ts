@@ -69,6 +69,9 @@ export class Product {
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt: Date;
 
+  @Column({ name: 'image_file_id', type: 'uuid', nullable: true })
+  imageFileId: string | null;
+
   @OneToMany(() => OrderItem, (item) => item.product)
   orderItems: OrderItem[];
 
