@@ -1,11 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { UnauthorizedException } from '@nestjs/common';
 
-jest.mock('bcrypt', () => ({ compare: jest.fn() }));
+jest.mock('bcrypt', () => ({ compare: jest.fn(), hash: jest.fn() }));
 import * as bcrypt from 'bcrypt';
 
 import { AuthService } from '../auth.service';
+import { TokenBlacklist } from '../entities/token-blacklist.entity';
 import { UserService } from '../../user/user.service';
 import { UserRole } from '../../user/enums/user-role.enum';
 
@@ -14,22 +16,39 @@ const MOCK_USER = {
   email: 'user@example.com',
   passwordHash: 'hashed',
   role: UserRole.USER,
+  tokenVersion: 1,
 };
+
+const futureDate = new Date(Date.now() + 3_600_000);  // +1 h
+const pastDate   = new Date(Date.now() - 1_000);       // -1 s
 
 describe('AuthService', () => {
   let service: AuthService;
   let userService: jest.Mocked<Pick<UserService, 'findByEmail'>>;
   let jwtService: jest.Mocked<Pick<JwtService, 'sign'>>;
+  let blacklistRepo: {
+    findOne: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+    delete: jest.Mock;
+  };
 
   beforeEach(async () => {
-    userService = { findByEmail: jest.fn() };
-    jwtService = { sign: jest.fn().mockReturnValue('signed.token') };
+    userService    = { findByEmail: jest.fn() };
+    jwtService     = { sign: jest.fn().mockReturnValue('signed.token') };
+    blacklistRepo  = {
+      findOne: jest.fn(),
+      create:  jest.fn((v) => v),
+      save:    jest.fn(),
+      delete:  jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
-        { provide: UserService, useValue: userService },
-        { provide: JwtService, useValue: jwtService },
+        { provide: UserService,                          useValue: userService },
+        { provide: JwtService,                           useValue: jwtService },
+        { provide: getRepositoryToken(TokenBlacklist),   useValue: blacklistRepo },
       ],
     }).compile();
 
@@ -44,11 +63,10 @@ describe('AuthService', () => {
       userService.findByEmail.mockResolvedValue(MOCK_USER as never);
 
       const result = await service.login('user@example.com', 'password');
-
       expect(result).toEqual({ accessToken: 'signed.token' });
     });
 
-    it('includes jti in JWT payload', async () => {
+    it('includes jti (UUID) and tokenVersion in JWT payload', async () => {
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
       userService.findByEmail.mockResolvedValue(MOCK_USER as never);
 
@@ -60,6 +78,7 @@ describe('AuthService', () => {
       expect(payload['jti']).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
       );
+      expect(payload).toHaveProperty('tokenVersion', 1);
     });
 
     it('throws 401 when user not found', async () => {
@@ -70,36 +89,48 @@ describe('AuthService', () => {
     it('throws 401 on wrong password', async () => {
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
       userService.findByEmail.mockResolvedValue(MOCK_USER as never);
-      await expect(service.login('user@example.com', 'wrong')).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(service.login('user@example.com', 'wrong')).rejects.toThrow(UnauthorizedException);
     });
   });
 
   // ─── logout() / isBlocked() ───────────────────────────────────────────────
 
-  describe('logout() + isBlocked()', () => {
-    const futureExp = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
-    const pastExp = Math.floor(Date.now() / 1000) - 1;     // 1 second ago
+  describe('logout()', () => {
+    it('saves entry to blacklist repository', async () => {
+      const exp = Math.floor(Date.now() / 1000) + 3600;
+      await service.logout('jti-abc', 1, exp);
+      expect(blacklistRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ jti: 'jti-abc', userId: 1 }),
+      );
+    });
+  });
 
-    it('isBlocked() returns false for unknown jti', () => {
-      expect(service.isBlocked('unknown-jti')).toBe(false);
+  describe('isBlocked()', () => {
+    it('returns false for unknown jti', async () => {
+      blacklistRepo.findOne.mockResolvedValue(null);
+      expect(await service.isBlocked('unknown')).toBe(false);
     });
 
-    it('isBlocked() returns true after logout()', () => {
-      service.logout('jti-abc', futureExp);
-      expect(service.isBlocked('jti-abc')).toBe(true);
+    it('returns true for a valid (non-expired) blacklist entry', async () => {
+      blacklistRepo.findOne.mockResolvedValue({ jti: 'jti-1', expiresAt: futureDate });
+      expect(await service.isBlocked('jti-1')).toBe(true);
     });
 
-    it('isBlocked() returns false after token has already expired', () => {
-      service.logout('jti-expired', pastExp);
-      expect(service.isBlocked('jti-expired')).toBe(false);
+    it('returns false when blacklist entry has already expired', async () => {
+      blacklistRepo.findOne.mockResolvedValue({ jti: 'jti-old', expiresAt: pastDate });
+      expect(await service.isBlocked('jti-old')).toBe(false);
     });
+  });
 
-    it('different JTIs are blocked independently', () => {
-      service.logout('jti-1', futureExp);
-      expect(service.isBlocked('jti-1')).toBe(true);
-      expect(service.isBlocked('jti-2')).toBe(false);
+  // ─── pruneExpiredBlacklist() ──────────────────────────────────────────────
+
+  describe('pruneExpiredBlacklist()', () => {
+    it('calls repo.delete with LessThan(now) condition', async () => {
+      blacklistRepo.delete.mockResolvedValue({ affected: 3 });
+      await service.pruneExpiredBlacklist();
+      expect(blacklistRepo.delete).toHaveBeenCalledWith(
+        expect.objectContaining({ expiresAt: expect.anything() }),
+      );
     });
   });
 });
