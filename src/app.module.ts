@@ -3,11 +3,15 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { ScheduleModule } from '@nestjs/schedule';
+import { APP_INTERCEPTOR, Reflector } from '@nestjs/core';
 import { join } from 'path';
 
 import { APP_CONFIG, ConfigModule } from './config/config.module';
 import { Config } from './config/config';
 import { AuthModule } from './auth/auth.module';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
+import { AuditLogsService } from './audit-logs/audit-logs.service';
+import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
 import { FilesModule } from './files/files.module';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
@@ -46,6 +50,7 @@ import { GraphqlUsersModule } from './graphql/users/graphql-users.module';
       path: '/graphql',
     }),
     AuthModule,
+    AuditLogsModule,
     FilesModule,
     UserModule,
     ProductsModule,
@@ -59,6 +64,14 @@ import { GraphqlUsersModule } from './graphql/users/graphql-users.module';
     GraphqlShippingModule,
     GraphqlStocksModule,
     GraphqlUsersModule,
+  ],
+  providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useFactory: (auditLogsService: AuditLogsService, reflector: Reflector) =>
+        new AuditLogInterceptor(auditLogsService, reflector),
+      inject: [AuditLogsService, Reflector],
+    },
   ],
 })
 export class AppModule {}
