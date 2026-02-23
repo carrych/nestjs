@@ -61,4 +61,19 @@ export class UserService {
     const user = await this.findOne(id);
     await this.userRepository.remove(user);
   }
+
+  async setRole(id: number, role: UserRole): Promise<User> {
+    const user = await this.findOne(id);
+    user.role = role;
+    return this.userRepository.save(user);
+  }
+
+  /**
+   * Increment tokenVersion — invalidates ALL active tokens for this user.
+   * The user must log in again to get a new token with the updated version.
+   */
+  async revokeAllSessions(id: number): Promise<void> {
+    const result = await this.userRepository.increment({ id }, 'tokenVersion', 1);
+    if (!result.affected) throw new NotFoundException(`User #${id} not found`);
+  }
 }

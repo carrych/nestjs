@@ -4,7 +4,7 @@ import { SkipAuditLog } from '../common/decorators/skip-audit-log.decorator';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { JwtPayload } from './strategies/jwt.strategy';
+import { User } from '../user/entities/user.entity';
 
 @SkipAuditLog()
 @Controller('auth')
@@ -20,7 +20,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
-  logout(@Req() req: { user: Pick<JwtPayload, 'jti' | 'exp'> & { tokenExp: number } }): void {
-    this.authService.logout(req.user.jti, req.user.tokenExp);
+  logout(@Req() req: { user: User & { jti: string; tokenExp: number } }): Promise<void> {
+    return this.authService.logout(req.user.jti, req.user.id, req.user.tokenExp);
   }
 }

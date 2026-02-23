@@ -10,8 +10,14 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 
+import { Roles } from '../auth/decorators/roles.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { UserRole } from './enums/user-role.enum';
+import { AssignRoleDto } from './dto/assign-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -62,5 +68,25 @@ export class UserController {
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
     return this.userService.remove(id);
+  }
+
+  // ─── Admin-only endpoints ──────────────────────────────────────────────────
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Patch(':id/role')
+  setRole(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AssignRoleDto,
+  ): Promise<User> {
+    return this.userService.setRole(id, dto.role);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post(':id/revoke-sessions')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  revokeSessions(@Param('id', ParseIntPipe) id: number): Promise<void> {
+    return this.userService.revokeAllSessions(id);
   }
 }

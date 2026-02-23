@@ -10,6 +10,7 @@ export interface JwtPayload {
   sub: number;
   email: string;
   jti: string;
+  tokenVersion: number;
   exp?: number;
 }
 
@@ -28,9 +29,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    if (this.authService.isBlocked(payload.jti)) throw new UnauthorizedException();
+    // 1. Individual token revoked (logout)
+    if (await this.authService.isBlocked(payload.jti)) throw new UnauthorizedException();
+
+    // 2. All user sessions revoked (password change / admin action)
     const user = await this.userService.findOne(payload.sub);
     if (!user) throw new UnauthorizedException();
+    if (user.tokenVersion !== payload.tokenVersion) throw new UnauthorizedException();
+
     return { ...user, jti: payload.jti, tokenExp: payload.exp };
   }
 }

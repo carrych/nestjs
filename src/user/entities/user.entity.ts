@@ -21,6 +21,9 @@ export class User {
   })
   role: UserRole;
 
+  @Column({ name: 'token_version', type: 'int', default: 1 })
+  tokenVersion: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 }
