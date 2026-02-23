@@ -2,10 +2,13 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
+import { ScheduleModule } from '@nestjs/schedule';
 import { join } from 'path';
 
 import { APP_CONFIG, ConfigModule } from './config/config.module';
 import { Config } from './config/config';
+import { AuthModule } from './auth/auth.module';
+import { FilesModule } from './files/files.module';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ProductsModule } from './products/products.module';
@@ -22,6 +25,7 @@ import { GraphqlUsersModule } from './graphql/users/graphql-users.module';
 @Module({
   imports: [
     ConfigModule,
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       inject: [APP_CONFIG],
       useFactory: (config: Config) => ({
@@ -41,6 +45,8 @@ import { GraphqlUsersModule } from './graphql/users/graphql-users.module';
       playground: true,
       path: '/graphql',
     }),
+    AuthModule,
+    FilesModule,
     UserModule,
     ProductsModule,
     OrdersModule,
