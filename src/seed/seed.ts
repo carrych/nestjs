@@ -1,5 +1,8 @@
 import 'dotenv/config';
+import * as bcrypt from 'bcrypt';
 import AppDataSource from '../../data-source';
+import { User } from '../user/entities/user.entity';
+import { UserRole } from '../user/enums/user-role.enum';
 import { Product } from '../products/entities/product.entity';
 import { Order } from '../orders/entities/order.entity';
 import { OrderItem } from '../orders/entities/order-item.entity';
@@ -11,6 +14,12 @@ import { PaymentStatus } from '../payments/enums/payment-status.enum';
 import { PaymentType } from '../payments/enums/payment-type.enum';
 import { PaymentMethod } from '../payments/enums/payment-method.enum';
 import { ShippingStatus } from '../shipping/enums/shipping-status.enum';
+
+const usersSeed: { email: string; role: UserRole }[] = [
+  { email: 'admin@example.com', role: UserRole.ADMIN },
+  { email: 'user1@example.com', role: UserRole.USER },
+  { email: 'user2@example.com', role: UserRole.USER },
+];
 
 const productsSeed: Partial<Product>[] = [
   {
@@ -82,12 +91,31 @@ async function seed() {
   console.log('DataSource initialized');
 
   try {
+    // ── Clean existing data ──
+    // Truncate in dependency order; CASCADE covers order_items, payments, shipping, stocks
+    await AppDataSource.query(`
+      TRUNCATE TABLE users, products
+      RESTART IDENTITY CASCADE
+    `);
+    console.log('Tables truncated');
+
+    const userRepo = AppDataSource.getRepository(User);
     const productRepo = AppDataSource.getRepository(Product);
     const orderRepo = AppDataSource.getRepository(Order);
     const orderItemRepo = AppDataSource.getRepository(OrderItem);
     const paymentRepo = AppDataSource.getRepository(Payment);
     const shippingRepo = AppDataSource.getRepository(Shipping);
     const stockRepo = AppDataSource.getRepository(Stock);
+
+    // ── Users ──
+    const passwordHash = await bcrypt.hash('password123', 12);
+    const usersToInsert: Partial<User>[] = usersSeed.map((u) => ({
+      ...u,
+      passwordHash,
+    }));
+    await userRepo.upsert(usersToInsert, ['email']);
+    const users = await userRepo.find({ order: { id: 'ASC' } });
+    console.log(`Seeded ${users.length} users`);
 
     // ── Products ──
     await productRepo.upsert(productsSeed, ['slug']);
@@ -106,11 +134,11 @@ async function seed() {
     // ── Orders ──
     // Insert orders one by one to let SERIAL generate order_number
     const ordersData = [
-      { userId: 1, status: OrderStatus.COMPLETE },
-      { userId: 1, status: OrderStatus.PENDING },
-      { userId: 2, status: OrderStatus.PROCESSING },
-      { userId: 3, status: OrderStatus.PENDING },
-      { userId: 2, status: OrderStatus.CANCELED },
+      { userId: users[0].id, status: OrderStatus.COMPLETE },
+      { userId: users[0].id, status: OrderStatus.PENDING },
+      { userId: users[1].id, status: OrderStatus.PROCESSING },
+      { userId: users[2].id, status: OrderStatus.PENDING },
+      { userId: users[1].id, status: OrderStatus.CANCELED },
     ];
 
     const orders: Order[] = [];
@@ -141,7 +169,7 @@ async function seed() {
     const paymentsSeed: Partial<Payment>[] = [
       {
         orderId: orders[0].id,
-        userId: 1,
+        userId: users[0].id,
         transactionNumber: 'TXN-001',
         amount: '75497.00',
         status: PaymentStatus.RECEIVED,
@@ -150,7 +178,7 @@ async function seed() {
       },
       {
         orderId: orders[2].id,
-        userId: 2,
+        userId: users[1].id,
         transactionNumber: 'TXN-002',
         amount: '58896.00',
         status: PaymentStatus.PENDING,
@@ -159,7 +187,7 @@ async function seed() {
       },
       {
         orderId: orders[4].id,
-        userId: 2,
+        userId: users[1].id,
         transactionNumber: 'TXN-003',
         amount: '47999.00',
         status: PaymentStatus.FAILED,
@@ -176,7 +204,7 @@ async function seed() {
     const shippingSeed: Partial<Shipping>[] = [
       {
         orderId: orders[0].id,
-        userId: 1,
+        userId: users[0].id,
         trackingNumber: 'NP-20450001234567',
         declaredValue: '75497.00',
         shippingCost: '150.00',
@@ -187,7 +215,7 @@ async function seed() {
       },
       {
         orderId: orders[2].id,
-        userId: 2,
+        userId: users[1].id,
         trackingNumber: 'NP-20450009876543',
         declaredValue: '58896.00',
         shippingCost: '120.00',
@@ -197,7 +225,7 @@ async function seed() {
       },
       {
         orderId: orders[3].id,
-        userId: 3,
+        userId: users[2].id,
         declaredValue: '116296.00',
         shippingCost: '200.00',
         weight: '0.900',
