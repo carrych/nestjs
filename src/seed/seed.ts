@@ -74,8 +74,8 @@ const productsSeed: Partial<Product>[] = [
 ];
 
 async function seed() {
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('Seeding is disabled in production');
+  if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_SEED) {
+    throw new Error('Seeding is disabled in production. Set ALLOW_SEED=true to override.');
   }
 
   await AppDataSource.initialize();

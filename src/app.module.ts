@@ -45,7 +45,10 @@ import { GraphqlUsersModule } from './graphql/users/graphql-users.module';
     }),
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
-      autoSchemaFile: join(process.cwd(), 'schema.gql'),
+      // GRAPHQL_SCHEMA_PATH allows overriding the schema file location.
+      // In distroless containers /tmp is the only writable path;
+      // in dev/prod-alpine the default (process.cwd()/schema.gql) works fine.
+      autoSchemaFile: process.env.GRAPHQL_SCHEMA_PATH ?? join(process.cwd(), 'schema.gql'),
       playground: true,
       path: '/graphql',
     }),
