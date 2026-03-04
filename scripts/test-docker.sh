@@ -35,6 +35,18 @@
 #   cd /home/dell/projects/nestjs
 #   cp .env.example .env   # edit DB_* and JWT_SECRET
 #   ./scripts/test-docker.sh
+#
+# Manual stack start (without full test run):
+#
+#   docker compose up -d postgres
+#   docker compose run --rm migrate
+#   docker compose run --rm seed
+#   docker compose up -d api
+#
+#   curl http://localhost:8080/health   # → {"status":"ok"}
+#   docker compose ps                  # → api (healthy), postgres (healthy)
+#
+#   docker compose --profile tools down -v  # stop + remove volumes
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
