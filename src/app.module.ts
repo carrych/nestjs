@@ -25,9 +25,11 @@ import { GraphqlPaymentsModule } from './graphql/payments/graphql-payments.modul
 import { GraphqlShippingModule } from './graphql/shipping/graphql-shipping.module';
 import { GraphqlStocksModule } from './graphql/stocks/graphql-stocks.module';
 import { GraphqlUsersModule } from './graphql/users/graphql-users.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
+    HealthModule,
     ConfigModule,
     ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
