@@ -1,88 +1,247 @@
-# NestJS Project
+# NestJS E-Commerce API
 
-Backend application built with NestJS framework.
+NestJS v11 e-commerce backend with TypeORM, PostgreSQL, GraphQL, JWT auth, and S3 file storage.
 
-## 📂 Project Structure
+---
+
+## Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Runtime | Node.js 22 / TypeScript |
+| Framework | NestJS v11 |
+| Database | PostgreSQL 16 + TypeORM 0.3 |
+| API | REST + GraphQL (Apollo) |
+| Auth | JWT (passport-jwt) |
+| Storage | AWS S3 / LocalStack |
+| Container | Docker + Docker Compose |
+
+---
+
+## Quick Start
+
+### 1. Prepare environment
+
+```bash
+cp .env.example .env
+# Edit .env: set DB_PASSWORD and JWT_SECRET at minimum
+```
+
+### 2. Run prod-like stack (API + PostgreSQL)
+
+```bash
+docker compose up --build
+```
+
+API available at **http://localhost:8080**
+GraphQL playground: **http://localhost:8080/graphql**
+
+### 3. Run dev stack (hot reload)
+
+```bash
+docker compose -f compose.yml -f compose.dev.yml up --build
+```
+
+Code changes are picked up instantly (no rebuild needed).
+PostgreSQL also exposed on **localhost:5432** in dev mode.
+
+---
+
+## Migrations and Seed
+
+One-off containers — run manually, finish and exit:
+
+```bash
+# Production (uses compiled dist/)
+docker compose run --rm migrate
+docker compose run --rm seed
+
+# Development (uses ts-node via yarn scripts)
+docker compose -f compose.yml -f compose.dev.yml run --rm migrate
+docker compose -f compose.yml -f compose.dev.yml run --rm seed
+```
+
+`migrate` and `seed` use `profiles: [tools]` — they do NOT start automatically
+with `docker compose up`. Always run them explicitly before starting the API.
+
+---
+
+## Full Workflow (First Run)
+
+```bash
+# 1. Start postgres
+docker compose up -d postgres
+
+# 2. Run migrations
+docker compose run --rm migrate
+
+# 3. (Optional) Seed data
+docker compose run --rm seed
+
+# 4. Start API
+docker compose up -d api
+
+# 5. Verify
+curl http://localhost:8080/graphql \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"query":"{ __typename }"}'
+```
+
+---
+
+## Docker Architecture
+
+### Multi-stage Dockerfile targets
+
+| Target | Base | Purpose |
+|--------|------|---------|
+| `deps` | node:22-alpine | Install all deps (shared layer cache) |
+| `dev` | node:22-alpine | Hot reload; bind-mounted source code |
+| `build` | node:22-alpine | TypeScript compilation to dist/ |
+| `prod-deps` | node:22-alpine | Production-only dependencies |
+| `prod` | node:22-alpine | Minimal runtime; non-root user `appuser` |
+| `prod-distroless` | distroless/nodejs22-debian12:nonroot | No shell, no OS tools, UID 65532 |
+
+### Key optimizations
+
+1. **Layer order**: `COPY package.json yarn.lock` first, then install, then `COPY . .`
+   Dependency layer is cached until lockfile changes — no reinstall on source edits.
+
+2. **BuildKit cache mounts**: `--mount=type=cache,target=/root/.yarn`
+   Yarn download cache is reused across builds without polluting image layers.
+
+3. **prod-deps stage**: `yarn install --production` strips devDependencies
+   (`@nestjs/cli`, `ts-node`, `jest`, TypeScript compiler, etc.) — saves ~100-150 MB.
+
+4. **distroless**: no shell, no package manager, no OS utilities.
+   Reduces attack surface; runs as UID 65532 (nonroot) by default.
+
+---
+
+## Network Layout
 
 ```
-src/
-├── config/             # Configuration module
-│   ├── config.module.ts
-│   └── config.ts
-├── user/               # User module (CRUD)
-│   ├── user.controller.spec.ts
-│   ├── user.controller.ts
-│   └── user.module.ts
-├── app.module.ts       # Root module
-└── main.ts             # Entry point
-test/                   # E2E tests
+host:8080 ──▶ api ──▶ backend (internal) ──▶ postgres  (no host port)
+               │
+               └──▶ public ──▶ internet (Nova Poshta, UkrPoshta, S3)
 ```
 
-## 🏗 Architecture Justification
+- `backend` network is `internal: true` — PostgreSQL is unreachable from outside Docker
+- `public` network allows API to reach external shipping/storage providers
+- PostgreSQL has no `ports:` directive — completely isolated from the host
 
-This project is built on NestJS, which provides an out-of-the-box application architecture inspired by Angular.
-Unlike unopinionated frameworks (like Express), Nest enforces a structure that promotes best practices, enabling the creation of highly testable, scalable, loosely coupled, and easily maintainable applications.
-The architecture is based on the "First Steps" guide and best practices for modular applications.
+---
 
-### Key Architectural Principles
+## Image Size Evidence
 
-- **Modular (Scalable):** The application is structured into Modules. Each module encapsulates a specific domain or feature (e.g., `ConfigModule`, `UserModule`). This logical separation allows the application to scale horizontally; features can be easily extracted into microservices or reused across different parts of the system without tight entanglements.
+Build and compare:
 
-- **Loosely Coupled (Dependency Injection):** NestJS uses a powerful Dependency Injection (DI) system. Instead of hard-coding dependencies (e.g., `const service = new UserService()`), classes request what they need through their constructors. The Nest runtime (IoC Container) manages the instantiation. This ensures that components do not depend on concrete implementations but rather on interfaces or tokens.
+```bash
+docker image ls nestjs-ecommerce
+```
 
-- **Highly Testable:** Because of the loose coupling provided by DI, testing becomes straightforward. When writing unit tests, we can easily swap out real database connections or external API services with mock objects. We can test the business logic of a Controller or Service in isolation without spinning up the entire application context.
+Expected results:
 
-- **Maintainable:** Nest imposes a strict directory structure and separates concerns using dedicated components: Controllers (handling requests), Services (business logic), Pipes (validation), Guards (authorization), and Interceptors (response mapping). This standardization means any developer familiar with Nest can immediately navigate the codebase, reducing technical debt over time.
+```
+REPOSITORY          TAG               SIZE
+nestjs-ecommerce    prod-distroless   ~160 MB
+nestjs-ecommerce    prod              ~200 MB
+nestjs-ecommerce    dev               ~350 MB
+```
 
-### 1. Modular Design
+Inspect layers of the smallest image:
 
-Following NestJS philosophy, the application is structured into modules. Each logical part of the domain is encapsulated in its own directory:
+```bash
+docker history nestjs-ecommerce:prod-distroless
+```
 
-- **AppModule** - the root module that assembles all feature modules.
-- **ConfigModule** - located in `src/config`, this module handles environment variables (via `.env`), ensuring a centralized configuration strategy.
+Why distroless is smallest and safest:
+- No `/bin/sh`, `/bin/bash` — no shell injection surface
+- No `apt`/`apk` — nothing to escalate privileges with
+- Only Node.js runtime + minimal libc/SSL
+- UID 65532 (nonroot) — never runs as root
 
-### 2. User Module & CRUD Integration
+---
 
-As per the assignment requirements and lecture notes, a specific User Module has been integrated (`src/user/`).
+## Non-Root Verification
 
-- **user.module.ts** - organizes the dependency injection context for the user feature.
-- **user.controller.ts** - handles incoming HTTP requests and returns responses.
-  - It implements full CRUD (Create, Read, Update, Delete) functionality.
-  - It utilizes standard decorators (`@Get`, `@Post`, `@Put`, `@Delete`, `@Body`, `@Param`) strictly following the Controllers documentation.
-- **user.controller.spec.ts** - contains unit tests for the controller, ensuring code reliability.
+**prod (alpine stage):**
 
-### 3. Entry Point
+```bash
+docker run --rm nestjs-ecommerce:prod id
+# uid=1001(appuser) gid=1001(appgroup) groups=1001(appgroup)
+```
 
-The `main.ts` file utilizes `NestFactory` to create the application instance. This is the standard entry point where global pipes, validation, and the listening port are configured.
+**prod-distroless:**
 
-### 4. Testing
+No shell available — cannot run `id`. Non-root is enforced at the image level:
 
-The structure includes a `test/` directory for End-to-End (E2E) testing (`app.e2e-spec.ts`), allowing for verification of the API routes from an external perspective.
+```bash
+# Inspect image config
+docker inspect nestjs-ecommerce:prod-distroless --format '{{.Config.User}}'
 
-## 🚀 Getting Started
+# The base image gcr.io/distroless/nodejs22-debian12:nonroot
+# sets USER to UID 65532 (nonroot group) unconditionally.
+# Our Dockerfile does not override USER, so :nonroot guarantees it.
+```
 
-Ensure you have Node.js (version specified in `.nvmrc`) and Yarn installed.
+Confirm no shell exists:
 
-1. Install dependencies:
+```bash
+docker run --rm --entrypoint sh nestjs-ecommerce:prod-distroless -c "echo has shell"
+# Error: exec: "sh": executable file not found in $PATH (exit 1)
+```
 
-   ```bash
-   yarn install
-   ```
+---
 
-2. Environment Setup. Create a `.env` file based on the example:
+## Automated Validation
 
-   ```bash
-   cp .env.example .env
-   ```
+```bash
+./scripts/test-docker.sh
+```
 
-3. Run the application (Development mode):
+Checks in order:
+1. Build all three targets (dev, prod, prod-distroless)
+2. Image size table
+3. Non-root in prod (alpine) via `id`
+4. No shell in prod-distroless (--entrypoint sh fails)
+5. Start postgres, wait for healthcheck
+6. Verify postgres NOT exposed on host
+7. Run migrations one-off container
+8. Run seed one-off container
+9. Start API, wait for response
+10. GraphQL introspection query
 
-   ```bash
-   yarn start:dev
-   ```
+---
 
-## 📚 References
+## Environment Variables
 
-- [NestJS Documentation: First Steps](https://docs.nestjs.com/first-steps)
-- [NestJS Controllers](https://docs.nestjs.com/controllers)
-- [NestJS Modules](https://docs.nestjs.com/modules)
+See `.env.example` for all available variables.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DB_HOST` | yes | PostgreSQL host (`postgres` in Docker) |
+| `DB_PORT` | yes | PostgreSQL port |
+| `DB_USER` | yes | Database user |
+| `DB_PASSWORD` | yes | Database password |
+| `DB_NAME` | yes | Database name |
+| `JWT_SECRET` | yes | JWT signing secret (min 32 chars) |
+| `JWT_EXPIRES_IN` | no | JWT expiry (default: `15m`) |
+| `AWS_ACCESS_KEY_ID` | yes | AWS / LocalStack key |
+| `AWS_SECRET_ACCESS_KEY` | yes | AWS / LocalStack secret |
+| `AWS_REGION` | yes | AWS region |
+| `AWS_S3_BUCKET` | yes | S3 bucket name |
+
+---
+
+## Local Development (without Docker)
+
+```bash
+yarn install
+yarn start:dev
+
+yarn migration:run
+yarn seed
+yarn db:reset    # drop + migrate + seed
+```
