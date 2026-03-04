@@ -64,6 +64,18 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # distroless has no shell/curl/wget — use node's built-in http module.
+    # /nodejs/bin/node is the absolute path to node in the distroless image.
+    healthcheck:
+      test:
+        - CMD
+        - /nodejs/bin/node
+        - -e
+        - "require('http').get('http://localhost:3000/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     init: true           # PID 1 signal handling; forwards SIGTERM correctly
     stop_grace_period: 30s
