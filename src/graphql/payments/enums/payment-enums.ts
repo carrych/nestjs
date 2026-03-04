@@ -5,6 +5,6 @@ import { PaymentType } from '../../../payments/enums/payment-type.enum';
 
 registerEnumType(PaymentStatus, { name: 'PaymentStatus' });
 registerEnumType(PaymentMethod, { name: 'PaymentMethod' });
-registerEnumType(PaymentType, { name: 'PaymentType' });
+registerEnumType(PaymentType, { name: 'PaymentDirection' });
 
 export { PaymentStatus, PaymentMethod, PaymentType };

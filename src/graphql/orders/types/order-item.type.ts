@@ -1,5 +1,5 @@
 import { ObjectType, Field, Int, Float } from '@nestjs/graphql';
-import { ProductType } from './product.type';
+import { OrderProductType } from './product.type';
 
 @ObjectType()
 export class OrderItemType {
@@ -18,6 +18,6 @@ export class OrderItemType {
   @Field(() => Float)
   discount: string;
 
-  @Field(() => ProductType)
-  product: ProductType;
+  @Field(() => OrderProductType)
+  product: OrderProductType;
 }

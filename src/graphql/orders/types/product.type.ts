@@ -1,7 +1,7 @@
 import { ObjectType, Field, Int, Float } from '@nestjs/graphql';
 
-@ObjectType()
-export class ProductType {
+@ObjectType('OrderProduct')
+export class OrderProductType {
   @Field(() => Int)
   id: number;
 
@@ -11,7 +11,7 @@ export class ProductType {
   @Field()
   slug: string;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   brand: string | null;
 
   @Field(() => Float)

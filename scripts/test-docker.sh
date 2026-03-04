@@ -196,19 +196,19 @@ fi
 
 # ── Stage 10: Run migrations ──────────────────────────────────────────────────
 title "10. Run migrations (one-off container)"
-docker compose --profile tools run --rm migrate \
+docker compose --profile tools run --rm --build migrate \
   && pass "Migrations completed successfully" \
   || fail "Migrations failed — check logs above"
 
 # ── Stage 11: Run seed ────────────────────────────────────────────────────────
 title "11. Run seed (one-off container)"
-docker compose --profile tools run --rm seed \
+docker compose --profile tools run --rm --build seed \
   && pass "Seed completed successfully" \
   || fail "Seed failed — check logs above"
 
 # ── Stage 12: Start API ───────────────────────────────────────────────────────
 title "12. Start API (prod-distroless)"
-docker compose up -d api
+docker compose up -d --build api
 
 # Wait for /health to return 200 — faster and more reliable than GraphQL
 info "Waiting for GET /health to return 200 (up to 90s)..."
