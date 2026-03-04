@@ -1,0 +1,119 @@
+name: nestjs-ecommerce
+
+# ─────────────────────────────────────────────────────────────────
+# Networks
+# ─────────────────────────────────────────────────────────────────
+# backend — internal network; PostgreSQL is NEVER exposed to the internet.
+#           All services that need the DB attach to this network.
+# public  — default bridge network; only api attaches here so it can
+#           reach external APIs (Nova Poshta, UkrPoshta, AWS S3).
+#           The `ports` mapping on api brings traffic from the host
+#           through Docker's NAT — internal: true would block that external reach.
+
+networks:
+  backend:
+    internal: true
+  public: {}
+
+# ─────────────────────────────────────────────────────────────────
+# Volumes
+# ─────────────────────────────────────────────────────────────────
+volumes:
+  pgdata:
+
+# ─────────────────────────────────────────────────────────────────
+# Services
+# ─────────────────────────────────────────────────────────────────
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - backend           # internal only — no ports: block = not reachable from host
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # ── API (prod-distroless) ────────────────────────────────────────
+  api:
+    build:
+      context: .
+      target: prod-distroless
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      GRAPHQL_SCHEMA_PATH: /tmp/schema.gql
+      # Override DB_HOST: in Docker, postgres is the service name, not "localhost"
+      DB_HOST: postgres
+    ports:
+      - "8080:3000"     # host:container — only api is reachable from host
+    networks:
+      - backend          # reaches postgres
+      - public           # reaches internet (Nova Poshta, UkrPoshta, S3)
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    init: true           # PID 1 signal handling; forwards SIGTERM correctly
+    stop_grace_period: 30s
+
+  # ── Migrations (one-off job) ─────────────────────────────────────
+  # Run manually: docker compose run --rm migrate
+  # Uses `prod` (alpine) stage — needs node to run TypeORM CLI
+  migrate:
+    build:
+      context: .
+      target: prod
+    command:
+      - node
+      - node_modules/typeorm/cli.js
+      - migration:run
+      - -d
+      - dist/data-source.js
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    profiles:
+      - tools
+
+  # ── Seed (one-off job) ───────────────────────────────────────────
+  # Run manually: docker compose run --rm seed
+  # ALLOW_SEED=true bypasses the production guard in seed.ts
+  seed:
+    build:
+      context: .
+      target: prod
+    command:
+      - node
+      - dist/src/seed/seed.js
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      ALLOW_SEED: "true"
+      DB_HOST: postgres
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    profiles:
+      - tools
