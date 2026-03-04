@@ -134,7 +134,8 @@ info "prod-distroless should be the smallest (no shell, no OS tools)"
 
 # ── Stage 3: docker history (layers of prod-distroless) ──────────────────────
 title "3. Layer history: prod-distroless"
-docker history nestjs-ecommerce:prod-distroless --no-trunc 2>/dev/null | head -20
+# `|| true` prevents SIGPIPE from `head` killing the script under `set -o pipefail`
+docker history nestjs-ecommerce:prod-distroless --no-trunc 2>/dev/null | head -20 || true
 
 # ── Stage 4: Non-root in prod (alpine) ───────────────────────────────────────
 title "4. Verify non-root user in prod (alpine)"
