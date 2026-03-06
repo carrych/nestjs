@@ -1,7 +1,7 @@
 import { Resolver, Query, Args, Int, ResolveField, Parent } from '@nestjs/graphql';
 import { StocksService } from '../../../stocks/stocks.service';
 import { StockType } from '../types/stock.type';
-import { ProductType } from '../../orders/types/product.type';
+import { ProductType } from '../../products/types/product.type';
 import { ProductLoader } from '../../orders/loaders/product.loader';
 import { Stock } from '../../../stocks/entities/stock.entity';
 
