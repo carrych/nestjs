@@ -12,7 +12,7 @@ export class ShippingType {
   @Field(() => Int)
   userId: number;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   trackingNumber: string | null;
 
   @Field(() => ShippingStatus)
@@ -30,12 +30,12 @@ export class ShippingType {
   @Field(() => Int, { nullable: true })
   seatsCount: number | null;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   description: string | null;
 
   @Field()
   createdAt: Date;
 
-  @Field({ nullable: true })
+  @Field(() => Date, { nullable: true })
   receivedAt: Date | null;
 }

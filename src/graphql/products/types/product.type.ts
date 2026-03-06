@@ -11,7 +11,7 @@ export class ProductType {
   @Field()
   slug: string;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   brand: string | null;
 
   @Field()
@@ -23,10 +23,10 @@ export class ProductType {
   @Field()
   published: boolean;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   shortDescription: string | null;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   description: string | null;
 
   @Field(() => Float)

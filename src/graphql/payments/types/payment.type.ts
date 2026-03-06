@@ -12,7 +12,7 @@ export class PaymentType {
   @Field(() => Int)
   userId: number;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   transactionNumber: string | null;
 
   @Field(() => Float)
