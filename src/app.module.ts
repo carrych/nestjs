@@ -26,11 +26,13 @@ import { GraphqlShippingModule } from './graphql/shipping/graphql-shipping.modul
 import { GraphqlStocksModule } from './graphql/stocks/graphql-stocks.module';
 import { GraphqlUsersModule } from './graphql/users/graphql-users.module';
 import { HealthModule } from './health/health.module';
+import { RabbitmqModule } from './rabbitmq/rabbitmq.module';
 
 @Module({
   imports: [
     HealthModule,
     ConfigModule,
+    RabbitmqModule,
     ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       inject: [APP_CONFIG],
