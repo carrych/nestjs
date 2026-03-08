@@ -28,6 +28,9 @@ export class StorageService {
       region: this.region,
       endpoint: this.s3Endpoint,
       forcePathStyle: config.get<string>('AWS_S3_FORCE_PATH_STYLE') === 'true',
+      // Disable automatic checksum injection so presigned PUT URLs work
+      // without clients needing to send x-amz-checksum-* headers
+      requestChecksumCalculation: 'WHEN_REQUIRED',
       credentials: {
         accessKeyId: config.getOrThrow<string>('AWS_ACCESS_KEY_ID'),
         secretAccessKey: config.getOrThrow<string>('AWS_SECRET_ACCESS_KEY'),
