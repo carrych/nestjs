@@ -40,6 +40,14 @@ export class FilesService {
       throw new BadRequestException(`Unsupported content type: ${dto.contentType}`);
     }
 
+    if (dto.entityType === 'product-image') {
+      const [product] = await this.dataSource.query(
+        `SELECT id FROM "products" WHERE "id" = $1`,
+        [Number(dto.entityId)],
+      );
+      if (!product) throw new NotFoundException(`Product #${dto.entityId} not found`);
+    }
+
     const key = this.fileKeyService.forProductImage(Number(dto.entityId), dto.contentType);
 
     const expiresAt = new Date(Date.now() + 15 * 60_000);
@@ -92,10 +100,13 @@ export class FilesService {
       });
 
       if (file.entityType === 'product-image') {
-        await manager.query(
-          `UPDATE "products" SET "image_file_id" = $1 WHERE "id" = $2`,
+        const returning = await manager.query(
+          `UPDATE "products" SET "image_file_id" = $1 WHERE "id" = $2 RETURNING id`,
           [fileId, Number(file.entityId)],
         );
+        if (!returning.length) {
+          throw new NotFoundException(`Product #${file.entityId} not found`);
+        }
       }
     });
 
