@@ -38,10 +38,19 @@ services:
       # LocalStack S3 (replaces AWS in dev)
       AWS_S3_ENDPOINT: http://localstack:4566
       AWS_S3_FORCE_PATH_STYLE: "true"
-      AWS_ACCESS_KEY_ID: test
-      AWS_SECRET_ACCESS_KEY: test
-      AWS_REGION: eu-central-1
-      AWS_S3_BUCKET: test-bucket
+      # LocalStack accepts any non-empty key; default to "test" if not set in .env
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+      AWS_REGION: ${AWS_REGION:-eu-central-1}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-test-bucket}
+    # dev stage runs on node:22-alpine — override the distroless healthcheck
+    # from compose.yml that uses /nodejs/bin/node (not present in alpine)
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   # ── Migrations (dev override) ─────────────────────────────────
   # Uses ts-node via yarn script (no compiled dist needed)
