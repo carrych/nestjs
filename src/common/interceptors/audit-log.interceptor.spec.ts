@@ -32,6 +32,7 @@ function makeContext(opts: {
   return {
     getHandler: jest.fn(),
     getClass: jest.fn(),
+    getType: jest.fn().mockReturnValue('http'),
     switchToHttp: () => ({
       getRequest: () => ({
         method,
