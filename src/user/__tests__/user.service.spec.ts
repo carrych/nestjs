@@ -20,10 +20,17 @@ const makeUser = (overrides: Partial<User> = {}): User =>
 describe('UserService — admin methods', () => {
   let service: UserService;
 
+  const mockQueryBuilder = {
+    addSelect: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    getOne: jest.fn(),
+  };
+
   const mockRepo = {
     findOne: jest.fn(),
     save: jest.fn(),
     increment: jest.fn(),
+    createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
   };
 
   beforeEach(async () => {
@@ -37,6 +44,30 @@ describe('UserService — admin methods', () => {
     }).compile();
 
     service = module.get(UserService);
+  });
+
+  // ─── findByEmail() ────────────────────────────────────────────────────────
+
+  describe('findByEmail()', () => {
+    it('returns user with passwordHash when found', async () => {
+      const user = makeUser();
+      mockQueryBuilder.getOne.mockResolvedValue(user);
+
+      const result = await service.findByEmail('user@example.com');
+
+      expect(mockRepo.createQueryBuilder).toHaveBeenCalledWith('user');
+      expect(mockQueryBuilder.addSelect).toHaveBeenCalledWith('user.passwordHash');
+      expect(mockQueryBuilder.where).toHaveBeenCalledWith('user.email = :email', { email: 'user@example.com' });
+      expect(result).toEqual(user);
+    });
+
+    it('returns null when user not found', async () => {
+      mockQueryBuilder.getOne.mockResolvedValue(null);
+
+      const result = await service.findByEmail('unknown@example.com');
+
+      expect(result).toBeNull();
+    });
   });
 
   // ─── setRole() ────────────────────────────────────────────────────────────
