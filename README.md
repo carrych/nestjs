@@ -138,28 +138,64 @@ host:8080 ──▶ api ──▶ backend (internal) ──▶ postgres  (no hos
 Build and compare:
 
 ```bash
-docker image ls nestjs-ecommerce
+docker build --target prod -t nestjs-ecommerce:prod .
+docker build --target prod-distroless -t nestjs-ecommerce:prod-distroless .
+docker image ls nestjs-ecommerce --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
 ```
 
-Expected results:
+Actual results (built on this machine):
 
 ```
-REPOSITORY          TAG               SIZE
-nestjs-ecommerce    prod-distroless   ~160 MB
-nestjs-ecommerce    prod              ~200 MB
-nestjs-ecommerce    dev               ~350 MB
+REPOSITORY         TAG               SIZE
+nestjs-ecommerce   prod-distroless   397MB
+nestjs-ecommerce   prod              424MB
+nestjs-ecommerce   dev               774MB
 ```
 
-Inspect layers of the smallest image:
+`prod-distroless` is ~7% smaller than `prod` (alpine), and both are roughly half the size of `dev` (which includes all devDependencies, TypeScript compiler, Jest, etc.).
+
+Inspect layers of the production images:
 
 ```bash
-docker history nestjs-ecommerce:prod-distroless
+docker history nestjs-ecommerce:prod-distroless --format "table {{.CreatedBy}}\t{{.Size}}"
 ```
 
-Why distroless is smallest and safest:
+```
+CREATED BY                                       SIZE
+CMD ["dist/src/main.js"]                         0B
+EXPOSE map[3000/tcp:{}]                          0B
+ENV GRAPHQL_SCHEMA_PATH=/tmp/schema.gql          0B
+COPY package.json ./                             12.3kB
+COPY /app/node_modules ./node_modules            170MB
+COPY /app/dist ./dist                            2.58MB
+WORKDIR /app                                     8.19kB
+bazel build @nodejs22_amd64//:data               124MB
+bazel build @bookworm//libssl3/amd64...          5.98MB
+bazel build @bookworm//libc6/amd64...            13.4MB
+...
+```
+
+```bash
+docker history nestjs-ecommerce:prod --format "table {{.CreatedBy}}\t{{.Size}}"
+```
+
+```
+CREATED BY                                       SIZE
+CMD ["node" "dist/src/main.js"]                  0B
+EXPOSE map[3000/tcp:{}]                          0B
+ENV GRAPHQL_SCHEMA_PATH=/tmp/schema.gql          0B
+USER appuser                                     0B
+COPY --chown=appuser:appgroup package.json ./    12.3kB
+COPY --chown=appuser:appgroup node_modules       170MB
+COPY --chown=appuser:appgroup dist               2.58MB
+RUN addgroup -S appgroup && adduser -S appuser   41kB
+WORKDIR /app                                     8.19kB
+```
+
+**Why distroless is smaller and safer than alpine:**
 - No `/bin/sh`, `/bin/bash` — no shell injection surface
 - No `apt`/`apk` — nothing to escalate privileges with
-- Only Node.js runtime + minimal libc/SSL
+- Only Node.js runtime + minimal libc/SSL from Debian base
 - UID 65532 (nonroot) — never runs as root
 
 ---
@@ -170,7 +206,7 @@ Why distroless is smallest and safest:
 
 ```bash
 docker run --rm nestjs-ecommerce:prod id
-# uid=1001(appuser) gid=1001(appgroup) groups=1001(appgroup)
+# uid=100(appuser) gid=101(appgroup) groups=101(appgroup)
 ```
 
 **prod-distroless:**
@@ -180,17 +216,16 @@ No shell available — cannot run `id`. Non-root is enforced at the image level:
 ```bash
 # Inspect image config
 docker inspect nestjs-ecommerce:prod-distroless --format '{{.Config.User}}'
-
-# The base image gcr.io/distroless/nodejs22-debian12:nonroot
-# sets USER to UID 65532 (nonroot group) unconditionally.
-# Our Dockerfile does not override USER, so :nonroot guarantees it.
+# 65532
 ```
+
+The base image `gcr.io/distroless/nodejs22-debian12:nonroot` sets `USER` to UID 65532 unconditionally. Our Dockerfile does not override `USER`, so `:nonroot` guarantees it.
 
 Confirm no shell exists:
 
 ```bash
 docker run --rm --entrypoint sh nestjs-ecommerce:prod-distroless -c "echo has shell"
-# Error: exec: "sh": executable file not found in $PATH (exit 1)
+# exec: "sh": executable file not found in $PATH (exit 1)
 ```
 
 ---
