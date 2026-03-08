@@ -43,6 +43,9 @@ export class Order {
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt: Date;
 
+  @Column({ type: 'timestamptz', name: 'processed_at', nullable: true })
+  processedAt: Date | null;
+
   @OneToMany(() => OrderItem, (item) => item.order)
   items: OrderItem[];
 
