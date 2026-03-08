@@ -9,12 +9,12 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   DataSource,
-  In,
   LessThanOrEqual,
   MoreThanOrEqual,
   QueryFailedError,
   Repository,
 } from 'typeorm';
+import { randomUUID } from 'crypto';
 
 import { Order } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
@@ -23,6 +23,10 @@ import { OrderStatus } from './enums/order-status.enum';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { QueryOrderDto } from './dto/query-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { RabbitmqService } from '../rabbitmq/rabbitmq.service';
+import { OutboxService } from '../outbox/outbox.service';
+import { ProcessedMessage } from '../idempotency/processed-message.entity';
+import { OrdersProcessMessage } from './orders-queue.types';
 
 // Valid status transitions: from → [allowed targets]
 const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -30,6 +34,7 @@ const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   [OrderStatus.PROCESSING]: [OrderStatus.COMPLETE, OrderStatus.CANCELED],
   [OrderStatus.COMPLETE]: [],
   [OrderStatus.CANCELED]: [],
+  [OrderStatus.PROCESSED]: [],
 };
 
 @Injectable()
@@ -42,6 +47,8 @@ export class OrdersService {
     @InjectRepository(OrderItem)
     private readonly orderItemRepository: Repository<OrderItem>,
     private readonly dataSource: DataSource,
+    private readonly rabbitmqService: RabbitmqService,
+    private readonly outboxService: OutboxService,
   ) {}
 
   /**
@@ -134,6 +141,16 @@ export class OrdersService {
       await queryRunner.commitTransaction();
       this.logger.log(`Order #${savedOrder.id} created (key: ${dto.idempotencyKey})`);
 
+      // 9. Publish to queue (fire-and-forget — does not block the API response)
+      const message: OrdersProcessMessage = {
+        messageId: randomUUID(),
+        orderId: savedOrder.id,
+        attempt: 1,
+      };
+      this.rabbitmqService.publishToQueue('orders.process', message, {
+        messageId: message.messageId,
+      });
+
       return { order: savedOrder, created: true };
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -166,6 +183,39 @@ export class OrdersService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  async processFromQueue(message: OrdersProcessMessage): Promise<void> {
+    await this.dataSource.transaction(async (manager) => {
+      try {
+        await manager.getRepository(ProcessedMessage).insert({
+          scope: 'orders.process',
+          messageId: message.messageId,
+          idempotencyKey: null,
+        });
+      } catch (err: any) {
+        if (String(err?.code) === '23505') {
+          return; // Already processed — idempotent skip
+        }
+        throw err;
+      }
+
+      if (message.simulate === 'alwaysFail') {
+        throw new Error('Simulated processing error');
+      }
+
+      const orderRepository = manager.getRepository(Order);
+      const order = await orderRepository.findOne({ where: { id: message.orderId } });
+      if (!order) {
+        throw new NotFoundException(`Order #${message.orderId} not found`);
+      }
+
+      order.status = OrderStatus.PROCESSED;
+      order.processedAt = new Date();
+      await orderRepository.save(order);
+
+      await this.outboxService.add('ORDER_PROCESSED', { orderId: order.id }, manager);
+    });
   }
 
   async findAll(query: QueryOrderDto): Promise<Order[]> {
