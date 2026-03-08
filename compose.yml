@@ -20,11 +20,32 @@ networks:
 # ─────────────────────────────────────────────────────────────────
 volumes:
   pgdata:
+  rabbitmq_data:
 
 # ─────────────────────────────────────────────────────────────────
 # Services
 # ─────────────────────────────────────────────────────────────────
 services:
+
+  # ── RabbitMQ ─────────────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - backend
+    ports:
+      - "15672:15672"   # Management UI — available on host for development
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
 
   # ── PostgreSQL ──────────────────────────────────────────────────
   postgres:
@@ -63,6 +84,8 @@ services:
       - public           # reaches internet (Nova Poshta, UkrPoshta, S3)
     depends_on:
       postgres:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     # distroless has no shell/curl/wget — use node's built-in http module.
     # /nodejs/bin/node is the absolute path to node in the distroless image.

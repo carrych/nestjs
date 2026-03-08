@@ -35,6 +35,7 @@ services:
     environment:
       NODE_ENV: development
       DB_HOST: postgres          # override localhost from .env
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
       # LocalStack S3 (replaces AWS in dev)
       AWS_S3_ENDPOINT: http://localstack:4566
       AWS_S3_FORCE_PATH_STYLE: "true"
