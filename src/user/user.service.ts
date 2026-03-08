@@ -30,7 +30,7 @@ export class UserService {
   async findByEmail(email: string): Promise<User | null> {
     return this.userRepository
       .createQueryBuilder('user')
-      .addSelect('user.password_hash')
+      .addSelect('user.passwordHash')
       .where('user.email = :email', { email })
       .getOne();
   }
