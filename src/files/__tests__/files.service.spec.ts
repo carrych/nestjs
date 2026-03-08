@@ -57,11 +57,12 @@ describe('FilesService', () => {
 
   const mockTxManager = {
     getRepository: jest.fn().mockReturnValue({ update: jest.fn() }),
-    query: jest.fn(),
+    query: jest.fn().mockResolvedValue([{ id: 1 }]),
   };
 
   const mockDataSource = {
     transaction: jest.fn((cb: (m: unknown) => Promise<void>) => cb(mockTxManager)),
+    query: jest.fn().mockResolvedValue([{ id: 5 }]),
   };
 
   beforeEach(async () => {
@@ -111,6 +112,11 @@ describe('FilesService', () => {
         BadRequestException,
       );
     });
+
+    it('throws NotFoundException if product does not exist', async () => {
+      mockDataSource.query.mockResolvedValueOnce([]);
+      await expect(service.presign(dto, 1)).rejects.toThrow(NotFoundException);
+    });
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -148,6 +154,12 @@ describe('FilesService', () => {
       mockRepo.findOne.mockResolvedValue(makeFile());
       mockStorage.objectExists.mockResolvedValueOnce(false);
       await expect(service.complete('file-uuid-1', 1)).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws NotFoundException if product does not exist during complete', async () => {
+      mockRepo.findOne.mockResolvedValue(makeFile());
+      mockTxManager.query.mockResolvedValueOnce([]);
+      await expect(service.complete('file-uuid-1', 1)).rejects.toThrow(NotFoundException);
     });
   });
 
