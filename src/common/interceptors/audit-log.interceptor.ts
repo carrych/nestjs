@@ -57,6 +57,8 @@ export class AuditLogInterceptor implements NestInterceptor {
         ]);
         if (skip) return;
 
+        if (context.getType() !== 'http') return;
+
         const req = context.switchToHttp().getRequest<Request>();
         const method = req.method;
 
