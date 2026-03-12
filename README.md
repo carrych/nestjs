@@ -283,6 +283,113 @@ yarn db:reset    # drop + migrate + seed
 
 ---
 
+## gRPC — Payments Service
+
+The project consists of **two independent processes**:
+
+| Process | Command | Default port | Description |
+|---------|---------|-------------|-------------|
+| **orders-service** (HTTP API) | `yarn start:dev` | `3000` | REST API + GraphQL + queue worker |
+| **payments-service** (gRPC) | `yarn start:payments-grpc` | `50051` | Handles Authorize / GetPaymentStatus |
+
+### Proto contract
+
+Located at [`proto/payments.proto`](proto/payments.proto) — the single source of truth.
+
+```
+proto/
+└── payments.proto          ← shared contract (proto3)
+
+src/
+├── payments-grpc/          ← gRPC SERVER entrypoint
+│   ├── main.ts             ← NestFactory.createMicroservice()
+│   ├── payments-grpc.module.ts
+│   ├── payments-grpc.controller.ts  ← @GrpcMethod handlers
+│   └── payments-grpc.service.ts     ← in-memory storage
+│
+└── orders/
+    ├── payments-grpc-client.interfaces.ts  ← TS contract (mirrors proto, no code import)
+    ├── orders.module.ts     ← ClientsModule.register (gRPC client)
+    └── orders.service.ts    ← calls Payments.Authorize with deadline
+```
+
+Orders knows Payments **only** through the proto contract — no module or class imports from `payments-grpc/`.
+
+### Required environment variables
+
+```bash
+# payments-service (gRPC server)
+PAYMENTS_GRPC_PORT=50051
+
+# orders-service (gRPC client)
+PAYMENTS_GRPC_URL=localhost:50051
+PAYMENTS_GRPC_TIMEOUT_MS=5000   # deadline for Authorize calls (ms)
+```
+
+### How to run locally
+
+**Terminal 1 — payments-service:**
+```bash
+PAYMENTS_GRPC_PORT=50051 yarn start:payments-grpc
+# → Payments gRPC server listening on :50051
+```
+
+**Terminal 2 — orders-service:**
+```bash
+PAYMENTS_GRPC_URL=localhost:50051 \
+PAYMENTS_GRPC_TIMEOUT_MS=5000 \
+yarn start:dev
+# → Nest application successfully started on port 3000
+```
+
+### Happy path: Orders → Payments.Authorize
+
+```bash
+curl -X POST http://localhost:3000/orders \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 1,
+    "items": [{ "productId": 1, "amount": 1, "price": "100.00" }]
+  }'
+```
+
+Expected response (HTTP 201):
+```json
+{
+  "id": 1,
+  "status": "pending",
+  "userId": 1,
+  "items": [...],
+  "payment": {
+    "paymentId": "uuid-v4",
+    "status": "AUTHORIZED"
+  }
+}
+```
+
+**payments-service** logs:
+```
+Authorize ok (paymentId=..., orderId=1, amount=100.00)
+```
+
+### Deadline/timeout behavior
+
+The deadline is applied at the gRPC call level via `CallOptions`:
+
+```typescript
+// orders/orders.service.ts
+const deadline = new Date(Date.now() + timeoutMs); // from PAYMENTS_GRPC_TIMEOUT_MS
+firstValueFrom(this.paymentsGrpc.authorize(req, new Metadata(), { deadline }))
+```
+
+| gRPC status | HTTP response |
+|------------|--------------|
+| `DEADLINE_EXCEEDED` | 504 Gateway Timeout |
+| `UNAVAILABLE` | 503 Service Unavailable |
+| other | 500 Internal Server Error |
+
+---
+
 ## RabbitMQ — Queue Topology
 
 ### Queues
