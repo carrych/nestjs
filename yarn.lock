@@ -2549,9 +2549,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@nestjs/microservices@npm:^11.1.16":
-  version: 11.1.16
-  resolution: "@nestjs/microservices@npm:11.1.16"
+"@nestjs/microservices@npm:~11.0.1":
+  version: 11.0.21
+  resolution: "@nestjs/microservices@npm:11.0.21"
   dependencies:
     iterare: "npm:1.2.1"
     tslib: "npm:2.8.1"
@@ -2588,7 +2588,7 @@ __metadata:
       optional: true
     nats:
       optional: true
-  checksum: 10c0/b8743305588dd0eb2b0482c51cfbe58fb93a810174fe56cea1d8c5510ad4cd0ffd61dde4d6498e7142f7422e29b20670bdbec765f3886868dd23b99a555eda08
+  checksum: 10c0/3810000290a79695dd6d26ec86a9f23670b9afad375e5ce535e4d8804243449f8b7d8b060c558f694d00c01caa67ad506f444075512571bcb39e73a069f1e943
   languageName: node
   linkType: hard
 
@@ -8281,7 +8281,7 @@ __metadata:
     "@nestjs/graphql": "npm:~13.2.4"
     "@nestjs/jwt": "npm:~11.0.2"
     "@nestjs/mapped-types": "npm:~2.1.0"
-    "@nestjs/microservices": "npm:^11.1.16"
+    "@nestjs/microservices": "npm:~11.0.1"
     "@nestjs/passport": "npm:~11.0.5"
     "@nestjs/platform-express": "npm:~11.0.1"
     "@nestjs/schedule": "npm:~6.1.1"
