@@ -25,7 +25,9 @@ function validate(config: Record<string, unknown>): Config {
     throw new Error(errors.toString());
   }
 
-  return validated;
+  // Merge raw env vars back so raw-key lookups (JWT_SECRET, RABBITMQ_URL, AWS_*)
+  // continue to work alongside the typed `database` nested object
+  return { ...config, ...validated } as unknown as Config;
 }
 
 @Global()
