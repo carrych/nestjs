@@ -8,6 +8,7 @@ import { OrdersProcessMessage } from './orders-queue.types';
 export class OrdersWorkerService implements OnApplicationBootstrap {
   private readonly logger = new Logger(OrdersWorkerService.name);
   private readonly maxAttempts = 3;
+  private readonly retryDelayMs = 1000; // base delay: 1s, doubles per attempt
 
   constructor(
     private readonly rabbitmqService: RabbitmqService,
@@ -62,9 +63,11 @@ export class OrdersWorkerService implements OnApplicationBootstrap {
       return;
     }
 
+    const delay = this.retryDelayMs * Math.pow(2, attempt - 1); // 1s, 2s, 4s...
     this.logger.log(
-      `Orders worker retry (messageId=${messageId}, orderId=${orderId}, attempt=${attempt + 1})`,
+      `Orders worker retry (messageId=${messageId}, orderId=${orderId}, attempt=${attempt + 1}, delayMs=${delay})`,
     );
+    await new Promise((resolve) => setTimeout(resolve, delay));
     this.rabbitmqService.publishToQueue(
       'orders.process',
       { ...payload, attempt: attempt + 1 },
