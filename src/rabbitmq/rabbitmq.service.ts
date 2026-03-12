@@ -24,8 +24,21 @@ export class RabbitmqService implements OnModuleInit, OnModuleDestroy {
     const url = this.configService.getOrThrow<string>('RABBITMQ_URL');
     const prefetch = Number(this.configService.get<string>('RABBITMQ_PREFETCH') ?? '10');
 
-    const client = await amqp.connect(url);
-    const ch = await client.createChannel();
+    const maxAttempts = 10;
+    let client: ChannelModel | null = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        client = await amqp.connect(url);
+        break;
+      } catch (err) {
+        if (attempt === maxAttempts) throw err;
+        const delay = 1000 * Math.pow(2, attempt - 1);
+        this.logger.warn(`RabbitMQ not ready, retrying in ${delay}ms (attempt ${attempt}/${maxAttempts})`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+
+    const ch = await client!.createChannel(); // client is set — loop throws if all attempts fail
 
     this.connection = client;
     this.channel = ch;
