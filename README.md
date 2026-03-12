@@ -536,7 +536,22 @@ SELECT COUNT(*) FROM processed_messages WHERE message_id = '<MSG_ID>';
 
 ## RabbitMQ Management UI
 
-Default URL: **http://localhost:15672** (user: `guest`, password: `guest`)
+### Start RabbitMQ (required before opening the UI)
+
+`compose.yml` already includes RabbitMQ with the management plugin and port `15672` exposed. Run from the project root:
+
+```bash
+docker compose up -d rabbitmq
+```
+
+Wait ~15 seconds, then verify it's healthy:
+
+```bash
+docker compose ps rabbitmq
+# rabbitmq   running (healthy)
+```
+
+Open **http://localhost:15672** in the browser — login `guest` / `guest`.
 
 ### What to look at
 
@@ -547,17 +562,4 @@ Default URL: **http://localhost:15672** (user: `guest`, password: `guest`)
 | **Queues → orders.dlq → Get messages** | Inspect failed messages after DLQ scenario |
 | **Overview → Message rates** | Publish / deliver / ack rates graph |
 
-### Enable Management plugin (if not running)
-
-```bash
-rabbitmq-plugins enable rabbitmq_management
-# Restart RabbitMQ, then open http://localhost:15672
-```
-
-Docker Compose expose port:
-```yaml
-# In compose.yml — add under rabbitmq service:
-ports:
-  - "5672:5672"    # AMQP
-  - "15672:15672"  # Management UI
-```
+> The queues (`orders.process`, `orders.dlq`) appear automatically once the API starts and connects to RabbitMQ for the first time.
