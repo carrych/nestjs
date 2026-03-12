@@ -103,8 +103,13 @@ describe('OrdersWorkerService', () => {
   });
 
   // ── retry ────────────────────────────────────────────────────────────────────
+  // Fake timers are used here to skip the exponential backoff delay (1s, 2s…)
+  // without waiting for real time to pass.
 
   describe('handleMessage() — retry', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
     it('republishes with attempt+1 and ACKs on first failure (attempt 1)', async () => {
       ordersService.processFromQueue.mockRejectedValueOnce(new Error('transient'));
 
@@ -112,7 +117,9 @@ describe('OrdersWorkerService', () => {
       const ch = makeChannel();
       const msg = makeMsg({ messageId: 'msg-2', orderId: 11, attempt: 1 });
 
-      await registeredHandler(msg, ch as unknown as Channel);
+      const handlePromise = registeredHandler(msg, ch as unknown as Channel);
+      await jest.runAllTimersAsync();
+      await handlePromise;
 
       expect(rabbitmqService.publishToQueue).toHaveBeenCalledWith(
         'orders.process',
@@ -129,7 +136,9 @@ describe('OrdersWorkerService', () => {
       const ch = makeChannel();
       const msg = makeMsg({ messageId: 'msg-3', orderId: 12, attempt: 2 });
 
-      await registeredHandler(msg, ch as unknown as Channel);
+      const handlePromise = registeredHandler(msg, ch as unknown as Channel);
+      await jest.runAllTimersAsync();
+      await handlePromise;
 
       expect(rabbitmqService.publishToQueue).toHaveBeenCalledWith(
         'orders.process',
@@ -137,6 +146,33 @@ describe('OrdersWorkerService', () => {
         expect.any(Object),
       );
       expect(ch.ack).toHaveBeenCalledWith(msg);
+    });
+
+    it('uses exponential backoff: delay doubles with each attempt', async () => {
+      jest.spyOn(global, 'setTimeout');
+      ordersService.processFromQueue.mockRejectedValueOnce(new Error('transient'));
+
+      await service.onApplicationBootstrap();
+      const ch = makeChannel();
+
+      // attempt 1 → delay = 1000ms
+      const msg1 = makeMsg({ messageId: 'msg-exp-1', orderId: 20, attempt: 1 });
+      const p1 = registeredHandler(msg1, ch as unknown as Channel);
+      await jest.runAllTimersAsync();
+      await p1;
+      expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 1000);
+
+      ordersService.processFromQueue.mockRejectedValueOnce(new Error('transient'));
+      jest.clearAllMocks();
+      // re-spy after clearAllMocks
+      jest.spyOn(global, 'setTimeout');
+
+      // attempt 2 → delay = 2000ms
+      const msg2 = makeMsg({ messageId: 'msg-exp-2', orderId: 21, attempt: 2 });
+      const p2 = registeredHandler(msg2, ch as unknown as Channel);
+      await jest.runAllTimersAsync();
+      await p2;
+      expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 2000);
     });
   });
 

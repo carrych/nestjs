@@ -3,10 +3,15 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import {
   BadRequestException,
   ConflictException,
+  GatewayTimeoutException,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { DataSource, QueryFailedError } from 'typeorm';
+import { of, throwError } from 'rxjs';
+import { status as GrpcStatus } from '@grpc/grpc-js';
 
 import { OrdersService } from '../orders.service';
 import { Order } from '../entities/order.entity';
@@ -17,6 +22,7 @@ import { OrderStatus } from '../enums/order-status.enum';
 import { RabbitmqService } from '../../rabbitmq/rabbitmq.service';
 import { OutboxService } from '../../outbox/outbox.service';
 import { CreateOrderDto } from '../dto/create-order.dto';
+import { PAYMENTS_GRPC_CLIENT } from '../orders.module';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -86,6 +92,19 @@ function makeQueryRunner(
   return { qr, manager, orderRepo, orderItemRepo, stockRepo, processedRepo };
 }
 
+// ─── gRPC mock ────────────────────────────────────────────────────────────────
+
+const mockPaymentResponse = { paymentId: 'pay-uuid-1', status: 'AUTHORIZED' };
+
+function makeMockPaymentsGrpc(authorizeImpl?: () => unknown) {
+  const authorize = jest.fn().mockImplementation(
+    authorizeImpl ?? (() => of(mockPaymentResponse)),
+  );
+  const grpcService = { authorize };
+  const grpcClient = { getService: jest.fn().mockReturnValue(grpcService) };
+  return { grpcClient, grpcService };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('OrdersService', () => {
@@ -94,6 +113,7 @@ describe('OrdersService', () => {
   let rabbitmqService: { publishToQueue: jest.Mock };
   let outboxService: { add: jest.Mock };
   let dataSource: { createQueryRunner: jest.Mock; transaction: jest.Mock };
+  let grpcService: { authorize: jest.Mock };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -117,6 +137,9 @@ describe('OrdersService', () => {
       transaction: jest.fn(),
     };
 
+    const { grpcClient, grpcService: gs } = makeMockPaymentsGrpc();
+    grpcService = gs;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrdersService,
@@ -125,10 +148,12 @@ describe('OrdersService', () => {
         { provide: DataSource, useValue: dataSource },
         { provide: RabbitmqService, useValue: rabbitmqService },
         { provide: OutboxService, useValue: outboxService },
+        { provide: PAYMENTS_GRPC_CLIENT, useValue: grpcClient },
       ],
     }).compile();
 
     service = module.get(OrdersService);
+    service.onModuleInit();
   });
 
   // ── create() ─────────────────────────────────────────────────────────────────
@@ -141,8 +166,8 @@ describe('OrdersService', () => {
       items: [{ productId: 1, amount: 2, price: 50, discount: 0 }],
     } as unknown as CreateOrderDto;
 
-    it('publishes to orders.process queue after successful creation', async () => {
-      orderRepository.findOne.mockResolvedValueOnce(null); // idempotency check
+    it('publishes to orders.process queue and calls Payments.Authorize', async () => {
+      orderRepository.findOne.mockResolvedValueOnce(null);
 
       const savedOrder = makeOrder({ id: 7 });
       const { qr } = makeQueryRunner([makeStock(1)], savedOrder, []);
@@ -157,6 +182,98 @@ describe('OrdersService', () => {
         expect.objectContaining({ orderId: 7, attempt: 1, messageId: expect.any(String) }),
         expect.objectContaining({ messageId: expect.any(String) }),
       );
+      expect(grpcService.authorize).toHaveBeenCalledWith(
+        expect.objectContaining({ orderId: 7, amount: '100.00', currency: 'UAH', idempotencyKey: 'key-1' }),
+        expect.anything(), // Metadata
+        expect.objectContaining({ deadline: expect.any(Date) }),
+      );
+    });
+
+    it('returns payment info in result after successful Authorize', async () => {
+      orderRepository.findOne.mockResolvedValueOnce(null);
+
+      const savedOrder = makeOrder({ id: 7 });
+      const { qr } = makeQueryRunner([makeStock(1)], savedOrder, []);
+      dataSource.createQueryRunner.mockReturnValue(qr);
+
+      const result = await service.create(dto);
+
+      expect(result.payment).toEqual({ paymentId: 'pay-uuid-1', status: 'AUTHORIZED' });
+    });
+
+    it('passes idempotencyKey to Authorize call', async () => {
+      orderRepository.findOne.mockResolvedValueOnce(null);
+
+      const savedOrder = makeOrder({ id: 8 });
+      const { qr } = makeQueryRunner([makeStock(1)], savedOrder, []);
+      dataSource.createQueryRunner.mockReturnValue(qr);
+
+      await service.create({ ...dto, idempotencyKey: 'my-key' } as unknown as CreateOrderDto);
+
+      expect(grpcService.authorize).toHaveBeenCalledWith(
+        expect.objectContaining({ idempotencyKey: 'my-key' }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('applies a Date deadline to the gRPC call', async () => {
+      orderRepository.findOne.mockResolvedValueOnce(null);
+
+      const savedOrder = makeOrder({ id: 9 });
+      const { qr } = makeQueryRunner([makeStock(1)], savedOrder, []);
+      dataSource.createQueryRunner.mockReturnValue(qr);
+
+      const before = Date.now();
+      await service.create(dto);
+      const after = Date.now();
+
+      const callOptions = grpcService.authorize.mock.calls[0][2] as { deadline: Date };
+      expect(callOptions.deadline).toBeInstanceOf(Date);
+      expect(callOptions.deadline.getTime()).toBeGreaterThan(before);
+      expect(callOptions.deadline.getTime()).toBeLessThanOrEqual(after + 10_000);
+    });
+
+    it('throws GatewayTimeoutException when Authorize returns DEADLINE_EXCEEDED', async () => {
+      orderRepository.findOne.mockResolvedValueOnce(null);
+
+      grpcService.authorize.mockReturnValueOnce(
+        throwError(() => Object.assign(new Error('deadline'), { code: GrpcStatus.DEADLINE_EXCEEDED })),
+      );
+
+      const savedOrder = makeOrder({ id: 10 });
+      const { qr } = makeQueryRunner([makeStock(1)], savedOrder, []);
+      dataSource.createQueryRunner.mockReturnValue(qr);
+
+      await expect(service.create(dto)).rejects.toThrow(GatewayTimeoutException);
+    });
+
+    it('throws ServiceUnavailableException when Authorize returns UNAVAILABLE', async () => {
+      orderRepository.findOne.mockResolvedValueOnce(null);
+
+      grpcService.authorize.mockReturnValueOnce(
+        throwError(() => Object.assign(new Error('unavailable'), { code: GrpcStatus.UNAVAILABLE })),
+      );
+
+      const savedOrder = makeOrder({ id: 11 });
+      const { qr } = makeQueryRunner([makeStock(1)], savedOrder, []);
+      dataSource.createQueryRunner.mockReturnValue(qr);
+
+      await expect(service.create(dto)).rejects.toThrow(ServiceUnavailableException);
+    });
+
+    it('throws InternalServerErrorException when Authorize fails with unknown gRPC error', async () => {
+      orderRepository.findOne.mockResolvedValueOnce(null);
+
+      grpcService.authorize.mockReturnValueOnce(
+        throwError(() => Object.assign(new Error('internal'), { code: GrpcStatus.INTERNAL })),
+      );
+
+      const savedOrder = makeOrder({ id: 12 });
+      const { qr } = makeQueryRunner([makeStock(1)], savedOrder, []);
+      dataSource.createQueryRunner.mockReturnValue(qr);
+
+      await expect(service.create(dto)).rejects.toThrow(InternalServerErrorException);
     });
 
     it('returns existing order (created=false) when idempotency key matches', async () => {
@@ -167,7 +284,9 @@ describe('OrdersService', () => {
 
       expect(result.created).toBe(false);
       expect(result.order).toBe(existing);
+      expect(result.payment).toBeNull();
       expect(rabbitmqService.publishToQueue).not.toHaveBeenCalled();
+      expect(grpcService.authorize).not.toHaveBeenCalled();
     });
 
     it('throws ConflictException on insufficient stock', async () => {
@@ -179,23 +298,23 @@ describe('OrdersService', () => {
 
       await expect(service.create(dto)).rejects.toThrow(ConflictException);
       expect(rabbitmqService.publishToQueue).not.toHaveBeenCalled();
+      expect(grpcService.authorize).not.toHaveBeenCalled();
     });
 
     it('throws ConflictException when no stock record exists for product', async () => {
       orderRepository.findOne.mockResolvedValueOnce(null);
 
-      // Return empty stock list (no record for product 1)
       const { qr } = makeQueryRunner([], makeOrder());
       dataSource.createQueryRunner.mockReturnValue(qr);
 
       await expect(service.create(dto)).rejects.toThrow(ConflictException);
-      expect(rabbitmqService.publishToQueue).not.toHaveBeenCalled();
+      expect(grpcService.authorize).not.toHaveBeenCalled();
     });
 
     it('handles race condition 23505 and returns existing order', async () => {
       orderRepository.findOne
-        .mockResolvedValueOnce(null)   // idempotency check
-        .mockResolvedValueOnce(makeOrder({ id: 5 })); // race condition lookup
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(makeOrder({ id: 5 }));
 
       const { qr } = makeQueryRunner([makeStock(1)], makeOrder());
       const err = Object.assign(new QueryFailedError('', [], new Error()), { code: '23505' });
@@ -207,6 +326,7 @@ describe('OrdersService', () => {
 
       expect(result.created).toBe(false);
       expect(result.order.id).toBe(5);
+      expect(grpcService.authorize).not.toHaveBeenCalled();
     });
   });
 
