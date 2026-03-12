@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   GatewayTimeoutException,
+  HttpException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -204,11 +205,8 @@ export class OrdersService implements OnModuleInit {
         }
       }
 
-      // Rethrow business errors (ConflictException, etc.)
-      if (
-        error instanceof ConflictException ||
-        error instanceof BadRequestException
-      ) {
+      // Rethrow any HTTP exception (business errors + gRPC-mapped errors like 503/504)
+      if (error instanceof HttpException) {
         throw error;
       }
 
