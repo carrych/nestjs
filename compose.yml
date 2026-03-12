@@ -37,7 +37,9 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
       - backend
+      - public           # needed for host port mapping (internal: true blocks it on backend)
     ports:
+      - "5672:5672"     # AMQP — for local dev (yarn start:dev outside Docker)
       - "15672:15672"   # Management UI — available on host for development
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
