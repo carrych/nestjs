@@ -29,6 +29,7 @@
     "migration:revert": "yarn typeorm migration:revert",
     "migration:generate": "yarn typeorm migration:generate",
     "seed": "ts-node -r tsconfig-paths/register src/seed/seed.ts",
+    "dev:start": "./scripts/dev-start.sh",
     "test:docker": "./scripts/test-docker.sh"
   },
   "dependencies": {

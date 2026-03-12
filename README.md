@@ -27,7 +27,27 @@ cp .env.example .env
 # Edit .env: set DB_PASSWORD and JWT_SECRET at minimum
 ```
 
-### 2. Run prod-like stack (API + PostgreSQL)
+### 2. Start full dev stack (one command)
+
+```bash
+./scripts/dev-start.sh
+# or: yarn dev:start
+```
+
+What it does: starts PostgreSQL + RabbitMQ in Docker, runs migrations, then starts
+`payments-grpc` server (port 50051) in background and `orders API` (port 3000) in foreground.
+Press **Ctrl+C** to stop everything.
+
+| Service | URL |
+|---------|-----|
+| HTTP API | http://localhost:3000 |
+| GraphQL | http://localhost:3000/graphql |
+| RabbitMQ UI | http://localhost:15672 (guest / guest) |
+| gRPC | localhost:50051 |
+
+---
+
+### 3. Run prod-like stack (API + PostgreSQL)
 
 ```bash
 docker compose up --build
