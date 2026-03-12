@@ -1,12 +1,17 @@
 import {
   BadRequestException,
   ConflictException,
+  GatewayTimeoutException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  OnModuleInit,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import type { ClientGrpc } from '@nestjs/microservices';
 import {
   DataSource,
   LessThanOrEqual,
@@ -14,6 +19,8 @@ import {
   QueryFailedError,
   Repository,
 } from 'typeorm';
+import { firstValueFrom } from 'rxjs';
+import { Metadata, status as GrpcStatus } from '@grpc/grpc-js';
 import { randomUUID } from 'crypto';
 
 import { Order } from './entities/order.entity';
@@ -27,6 +34,11 @@ import { RabbitmqService } from '../rabbitmq/rabbitmq.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { ProcessedMessage } from '../idempotency/processed-message.entity';
 import { OrdersProcessMessage } from './orders-queue.types';
+import { PAYMENTS_GRPC_CLIENT } from './orders.module';
+import type {
+  AuthorizeResponse,
+  PaymentsGrpcClient,
+} from './payments-grpc-client.interfaces';
 
 // Valid status transitions: from → [allowed targets]
 const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -38,8 +50,11 @@ const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 };
 
 @Injectable()
-export class OrdersService {
+export class OrdersService implements OnModuleInit {
   private readonly logger = new Logger(OrdersService.name);
+  private paymentsGrpc: PaymentsGrpcClient;
+  // Typed as interface separately to avoid isolatedModules + emitDecoratorMetadata conflict
+  private readonly grpcClient: ClientGrpc;
 
   constructor(
     @InjectRepository(Order)
@@ -49,7 +64,14 @@ export class OrdersService {
     private readonly dataSource: DataSource,
     private readonly rabbitmqService: RabbitmqService,
     private readonly outboxService: OutboxService,
-  ) {}
+    @Inject(PAYMENTS_GRPC_CLIENT) grpcClient: any,
+  ) {
+    this.grpcClient = grpcClient;
+  }
+
+  onModuleInit() {
+    this.paymentsGrpc = this.grpcClient.getService<PaymentsGrpcClient>('Payments');
+  }
 
   /**
    * Transactional order creation with:
@@ -57,7 +79,9 @@ export class OrdersService {
    * - Pessimistic locking on stocks (FOR NO KEY UPDATE) to prevent oversell
    * - Atomic: order + items + stock reservation in single transaction
    */
-  async create(dto: CreateOrderDto): Promise<{ order: Order; created: boolean }> {
+  async create(
+    dto: CreateOrderDto,
+  ): Promise<{ order: Order; created: boolean; payment: AuthorizeResponse | null }> {
     // 1. Idempotency check: return existing order if key already used
     if (dto.idempotencyKey) {
       const existing = await this.orderRepository.findOne({
@@ -65,7 +89,7 @@ export class OrdersService {
         relations: { items: true },
       });
       if (existing) {
-        return { order: existing, created: false };
+        return { order: existing, created: false, payment: null };
       }
     }
 
@@ -151,7 +175,17 @@ export class OrdersService {
         messageId: message.messageId,
       });
 
-      return { order: savedOrder, created: true };
+      // 10. Authorize payment via gRPC (after commit to avoid holding DB transaction)
+      const totalAmount = dto.items
+        .reduce((sum, item) => sum + Number(item.price) * item.amount, 0)
+        .toFixed(2);
+      const payment = await this.authorizePayment(
+        savedOrder.id,
+        totalAmount,
+        dto.idempotencyKey,
+      );
+
+      return { order: savedOrder, created: true, payment };
     } catch (error) {
       await queryRunner.rollbackTransaction();
 
@@ -166,7 +200,7 @@ export class OrdersService {
           relations: { items: true },
         });
         if (existing) {
-          return { order: existing, created: false };
+          return { order: existing, created: false, payment: null };
         }
       }
 
@@ -182,6 +216,44 @@ export class OrdersService {
       throw new InternalServerErrorException('Order creation failed');
     } finally {
       await queryRunner.release();
+    }
+  }
+
+  /**
+   * Calls Payments.Authorize via gRPC with a configurable deadline.
+   * Maps gRPC status codes → HTTP exceptions so callers get clean errors.
+   */
+  private async authorizePayment(
+    orderId: number,
+    amount: string,
+    idempotencyKey?: string | null,
+  ): Promise<AuthorizeResponse | null> {
+    const timeoutMs = Number(process.env.PAYMENTS_GRPC_TIMEOUT_MS ?? 5000);
+    const deadline = new Date(Date.now() + timeoutMs);
+
+    try {
+      const response = await firstValueFrom(
+        this.paymentsGrpc.authorize(
+          { orderId, amount, currency: 'UAH', idempotencyKey: idempotencyKey ?? undefined },
+          new Metadata(),
+          { deadline },
+        ),
+      );
+      this.logger.log(
+        `Payment authorized (orderId=${orderId}, paymentId=${response.paymentId}, status=${response.status})`,
+      );
+      return response;
+    } catch (err: any) {
+      const code = err?.code;
+      this.logger.error(`Payments.Authorize failed (orderId=${orderId}): ${err?.message}`);
+
+      if (code === GrpcStatus.DEADLINE_EXCEEDED) {
+        throw new GatewayTimeoutException('Payment service timed out');
+      }
+      if (code === GrpcStatus.UNAVAILABLE) {
+        throw new ServiceUnavailableException('Payment service unavailable');
+      }
+      throw new InternalServerErrorException('Payment authorization failed');
     }
   }
 
