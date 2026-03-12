@@ -74,13 +74,24 @@ if [ ! -f .env ]; then
 fi
 pass ".env file exists"
 
-# ── 2. Start Docker services ──────────────────────────────────────────────────
-title "2. Start PostgreSQL + RabbitMQ"
+# ── 2. Free ports ────────────────────────────────────────────────────────────
+title "2. Free ports"
+GRPC_PORT="${PAYMENTS_GRPC_PORT:-50051}"
+GRPC_PID=$(lsof -ti:"$GRPC_PORT" 2>/dev/null || true)
+if [ -n "$GRPC_PID" ]; then
+  kill "$GRPC_PID" 2>/dev/null || true
+  pass "Killed stale process on port $GRPC_PORT (PID $GRPC_PID)"
+else
+  pass "Port $GRPC_PORT is free"
+fi
+
+# ── 3. Start Docker services ──────────────────────────────────────────────────
+title "3. Start PostgreSQL + RabbitMQ"
 docker compose up -d postgres rabbitmq
 pass "Containers started"
 
 # ── 3. Wait for postgres ──────────────────────────────────────────────────────
-title "3. Wait for PostgreSQL"
+title "4. Wait for PostgreSQL"
 info "Waiting for postgres healthcheck (up to 60s)..."
 WAITED=0
 until docker compose ps postgres 2>/dev/null | grep -q "(healthy)"; do
@@ -90,7 +101,7 @@ done
 pass "postgres is healthy"
 
 # ── 4. Wait for RabbitMQ ──────────────────────────────────────────────────────
-title "4. Wait for RabbitMQ"
+title "5. Wait for RabbitMQ"
 info "Waiting for rabbitmq healthcheck (up to 60s)..."
 WAITED=0
 until docker compose ps rabbitmq 2>/dev/null | grep -q "(healthy)"; do
@@ -101,11 +112,11 @@ pass "rabbitmq is healthy"
 info "Management UI → http://localhost:15672  (guest / guest)"
 
 # ── 5. Run migrations ─────────────────────────────────────────────────────────
-title "5. Run DB migrations"
+title "6. Run DB migrations"
 yarn migration:run && pass "Migrations applied" || fail "Migrations failed"
 
 # ── 6. Start payments-grpc in background ─────────────────────────────────────
-title "6. Start payments-grpc server (background)"
+title "7. Start payments-grpc server (background)"
 PAYMENTS_GRPC_PORT="${PAYMENTS_GRPC_PORT:-50051}"
 info "Starting payments-grpc on port $PAYMENTS_GRPC_PORT..."
 
@@ -120,7 +131,7 @@ fi
 pass "payments-grpc running (PID $PAYMENTS_GRPC_PID, port $PAYMENTS_GRPC_PORT)"
 
 # ── 7. Start orders API ───────────────────────────────────────────────────────
-title "7. Start orders API (foreground)"
+title "8. Start orders API (foreground)"
 echo ""
 echo -e "${BLUE}  HTTP API   → http://localhost:3000${NC}"
 echo -e "${BLUE}  GraphQL    → http://localhost:3000/graphql${NC}"
