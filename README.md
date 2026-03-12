@@ -280,3 +280,177 @@ yarn migration:run
 yarn seed
 yarn db:reset    # drop + migrate + seed
 ```
+
+---
+
+## RabbitMQ — Queue Topology
+
+### Queues
+
+| Queue | Durable | Purpose |
+|-------|---------|---------|
+| `orders.process` | yes | Main processing queue — receives new order events |
+| `orders.dlq` | yes | Dead-letter queue — receives messages that failed all retry attempts |
+
+> No custom exchanges are used. Both queues use the **default exchange** (direct, empty name). Messages are routed by `routingKey = queueName`.
+
+### Message format (`orders.process`)
+
+```json
+{
+  "messageId": "uuid-v4",
+  "orderId": 42,
+  "attempt": 1
+}
+```
+
+- `messageId` — idempotency key, stored in `processed_messages` table
+- `attempt` — incremented on each retry (1-based); when `attempt >= 3` → DLQ
+
+### Retry policy
+
+| Attempt | Delay before re-publish |
+|---------|------------------------|
+| 1 → 2 | 1 000 ms |
+| 2 → 3 | 2 000 ms |
+| 3 → DLQ | — |
+
+---
+
+## Scenario Walkthroughs
+
+### Prerequisites
+
+```bash
+# Start RabbitMQ + PostgreSQL + API
+docker compose up -d rabbitmq postgres
+docker compose run --rm migrate
+WORKERS_ENABLED=true docker compose up -d api
+
+# Or locally:
+RABBITMQ_URL=amqp://guest:guest@localhost:5672 WORKERS_ENABLED=true yarn start:dev
+```
+
+---
+
+### Scenario 1 — Happy path (PENDING → PROCESSED)
+
+```bash
+# Create order
+curl -X POST http://localhost:8080/orders
+# → { "id": 1, "status": "pending" }
+
+# Poll until processed (worker picks up within seconds)
+curl http://localhost:8080/orders/1
+# → { "id": 1, "status": "processed", "processedAt": "..." }
+```
+
+Expected logs:
+```
+Orders worker subscribed: orders.process
+Orders worker success (messageId=..., orderId=1, attempt=1)
+```
+
+---
+
+### Scenario 2 — Retry (transient failure)
+
+```bash
+# Publish a message that simulates transient failure on attempts 1-2
+# (requires direct RabbitMQ access or a test endpoint)
+curl -X POST http://localhost:8080/orders/test/publish \
+  -H "Content-Type: application/json" \
+  -d '{"orderId": 2, "simulate": "failTwice"}'
+```
+
+Expected logs:
+```
+Orders worker failed  (messageId=..., orderId=2, attempt=1): simulated failure
+Orders worker retry   (messageId=..., orderId=2, attempt=2, delayMs=1000)
+Orders worker failed  (messageId=..., orderId=2, attempt=2): simulated failure
+Orders worker retry   (messageId=..., orderId=2, attempt=3, delayMs=2000)
+Orders worker success (messageId=..., orderId=2, attempt=3)
+```
+
+---
+
+### Scenario 3 — DLQ (all attempts exhausted)
+
+```bash
+# Publish a message that always fails
+curl -X POST http://localhost:8080/orders/test/publish \
+  -H "Content-Type: application/json" \
+  -d '{"orderId": 3, "simulate": "alwaysFail"}'
+```
+
+Expected logs:
+```
+Orders worker failed (messageId=..., orderId=3, attempt=1)
+Orders worker retry  (messageId=..., orderId=3, attempt=2, delayMs=1000)
+Orders worker failed (messageId=..., orderId=3, attempt=2)
+Orders worker retry  (messageId=..., orderId=3, attempt=3, delayMs=2000)
+Orders worker failed (messageId=..., orderId=3, attempt=3)
+Orders worker DLQ    (messageId=..., orderId=3, attempt=3)
+```
+
+Verify DLQ received the message (Management UI or CLI):
+```bash
+# Via rabbitmqctl
+rabbitmqctl list_queues name messages
+# orders.dlq  1
+
+# Peek at DLQ message
+rabbitmqadmin get queue=orders.dlq count=1
+```
+
+---
+
+### Scenario 4 — Idempotency (duplicate delivery)
+
+```bash
+# Publish the same messageId twice
+MSG_ID=$(uuidgen)
+for i in 1 2; do
+  rabbitmqadmin publish \
+    routing_key=orders.process \
+    payload="{\"messageId\":\"$MSG_ID\",\"orderId\":4,\"attempt\":1}"
+done
+```
+
+Expected: order processed exactly once, second delivery silently acked.
+
+Verify in DB:
+```sql
+SELECT COUNT(*) FROM processed_messages WHERE message_id = '<MSG_ID>';
+-- 1  (not 2)
+```
+
+---
+
+## RabbitMQ Management UI
+
+Default URL: **http://localhost:15672** (user: `guest`, password: `guest`)
+
+### What to look at
+
+| Tab | How to use |
+|-----|-----------|
+| **Queues** | See `orders.process` and `orders.dlq`, message counts (Ready / Unacked / Total) |
+| **Queues → orders.process → Get messages** | Peek at queued messages without consuming |
+| **Queues → orders.dlq → Get messages** | Inspect failed messages after DLQ scenario |
+| **Overview → Message rates** | Publish / deliver / ack rates graph |
+
+### Enable Management plugin (if not running)
+
+```bash
+rabbitmq-plugins enable rabbitmq_management
+# Restart RabbitMQ, then open http://localhost:15672
+```
+
+Docker Compose expose port:
+```yaml
+# In compose.yml — add under rabbitmq service:
+ports:
+  - "5672:5672"    # AMQP
+  - "15672:15672"  # Management UI
+```
