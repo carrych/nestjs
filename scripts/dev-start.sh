@@ -79,7 +79,13 @@ title "2. Free ports"
 GRPC_PORT="${PAYMENTS_GRPC_PORT:-50051}"
 GRPC_PID=$(lsof -ti:"$GRPC_PORT" 2>/dev/null || true)
 if [ -n "$GRPC_PID" ]; then
-  kill "$GRPC_PID" 2>/dev/null || true
+  kill -9 "$GRPC_PID" 2>/dev/null || true
+  # Wait until the port is actually released (up to 10s)
+  WAITED=0
+  while lsof -ti:"$GRPC_PORT" >/dev/null 2>&1; do
+    sleep 1; WAITED=$((WAITED + 1))
+    [ "$WAITED" -ge 10 ] && fail "Port $GRPC_PORT not released after 10s"
+  done
   pass "Killed stale process on port $GRPC_PORT (PID $GRPC_PID)"
 else
   pass "Port $GRPC_PORT is free"
