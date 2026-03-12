@@ -35,7 +35,7 @@ import { RabbitmqService } from '../rabbitmq/rabbitmq.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { ProcessedMessage } from '../idempotency/processed-message.entity';
 import { OrdersProcessMessage } from './orders-queue.types';
-import { PAYMENTS_GRPC_CLIENT } from './orders.module';
+import { PAYMENTS_GRPC_CLIENT } from './orders.constants';
 import type {
   AuthorizeResponse,
   PaymentsGrpcClient,

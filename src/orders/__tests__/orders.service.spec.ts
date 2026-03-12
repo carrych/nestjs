@@ -22,7 +22,7 @@ import { OrderStatus } from '../enums/order-status.enum';
 import { RabbitmqService } from '../../rabbitmq/rabbitmq.service';
 import { OutboxService } from '../../outbox/outbox.service';
 import { CreateOrderDto } from '../dto/create-order.dto';
-import { PAYMENTS_GRPC_CLIENT } from '../orders.module';
+import { PAYMENTS_GRPC_CLIENT } from '../orders.constants';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 

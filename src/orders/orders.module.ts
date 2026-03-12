@@ -11,8 +11,7 @@ import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
 import { OrdersWorkerService } from './orders-worker.service';
 import { OutboxModule } from '../outbox/outbox.module';
-
-export const PAYMENTS_GRPC_CLIENT = 'PAYMENTS_GRPC_CLIENT';
+import { PAYMENTS_GRPC_CLIENT } from './orders.constants';
 
 @Module({
   imports: [
