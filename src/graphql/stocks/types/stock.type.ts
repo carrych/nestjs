@@ -1,5 +1,5 @@
 import { ObjectType, Field, Int } from '@nestjs/graphql';
-import { OrderProductType } from '../../orders/types/product.type';
+import { ProductType } from '../../products/types/product.type';
 
 @ObjectType()
 export class StockType {
@@ -18,6 +18,6 @@ export class StockType {
   @Field()
   updatedAt: Date;
 
-  @Field(() => OrderProductType)
-  product: OrderProductType;
+  @Field(() => ProductType)
+  product: ProductType;
 }

@@ -1,7 +1,7 @@
 import { Resolver, Query, Args, Int, ResolveField, Parent } from '@nestjs/graphql';
 import { StocksService } from '../../../stocks/stocks.service';
 import { StockType } from '../types/stock.type';
-import { OrderProductType } from '../../orders/types/product.type';
+import { ProductType } from '../../products/types/product.type';
 import { ProductLoader } from '../../orders/loaders/product.loader';
 import { Stock } from '../../../stocks/entities/stock.entity';
 
@@ -24,8 +24,8 @@ export class StocksResolver {
     return this.stocksService.findByProductId(productId);
   }
 
-  @ResolveField('product', () => OrderProductType)
-  async getProduct(@Parent() stock: Stock): Promise<OrderProductType> {
+  @ResolveField('product', () => ProductType)
+  async getProduct(@Parent() stock: Stock): Promise<ProductType> {
     return this.productLoader.load(Number(stock.productId));
   }
 }

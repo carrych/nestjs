@@ -1,6 +1,6 @@
 import { Resolver, ResolveField, Parent } from '@nestjs/graphql';
 import { OrderItemType } from '../types/order-item.type';
-import { OrderProductType } from '../types/product.type';
+import { ProductType } from '../../products/types/product.type';
 import { ProductLoader } from '../loaders/product.loader';
 import { OrderItem } from '../../../orders/entities/order-item.entity';
 
@@ -8,8 +8,8 @@ import { OrderItem } from '../../../orders/entities/order-item.entity';
 export class OrderItemResolver {
   constructor(private readonly productLoader: ProductLoader) {}
 
-  @ResolveField('product', () => OrderProductType)
-  async getProduct(@Parent() orderItem: OrderItem): Promise<OrderProductType> {
+  @ResolveField('product', () => ProductType)
+  async getProduct(@Parent() orderItem: OrderItem): Promise<ProductType> {
     return this.productLoader.load(Number(orderItem.productId));
   }
 }
