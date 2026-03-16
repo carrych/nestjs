@@ -1,0 +1,98 @@
+name: nestjs-ecommerce
+
+# ─────────────────────────────────────────────────────────────────
+# Dev override — merge with compose.yml:
+#   docker compose -f compose.yml -f compose.dev.yml up --build
+#
+# Overrides:
+#   api     → dev stage (bind mount, hot reload)
+#   migrate → dev stage (ts-node, yarn migration:run)
+#   seed    → dev stage (ts-node, yarn seed)
+#   postgres → expose port 5432 to host for local DB access
+# Adds:
+#   localstack → local S3 emulation
+# ─────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL (dev override) ─────────────────────────────────
+  # Expose port 5432 to host for direct DB access (GUI tools, psql)
+  postgres:
+    ports:
+      - "5432:5432"
+
+  # ── API (dev override) ────────────────────────────────────────
+  # Uses `dev` stage: node_modules baked in, source code bind-mounted
+  api:
+    build:
+      context: .
+      target: dev
+    command: yarn start:dev
+    volumes:
+      - .:/app                # bind mount source code for hot reload
+      - /app/node_modules     # anonymous volume prevents overwriting container's node_modules
+    env_file: .env
+    environment:
+      NODE_ENV: development
+      DB_HOST: postgres          # override localhost from .env
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      # LocalStack S3 (replaces AWS in dev)
+      AWS_S3_ENDPOINT: http://localstack:4566
+      AWS_S3_FORCE_PATH_STYLE: "true"
+      # LocalStack accepts any non-empty key; default to "test" if not set in .env
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+      AWS_REGION: ${AWS_REGION:-eu-central-1}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-test-bucket}
+    # dev stage runs on node:22-alpine — override the distroless healthcheck
+    # from compose.yml that uses /nodejs/bin/node (not present in alpine)
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ── Migrations (dev override) ─────────────────────────────────
+  # Uses ts-node via yarn script (no compiled dist needed)
+  migrate:
+    build:
+      context: .
+      target: dev
+    command: yarn migration:run
+    volumes:
+      - .:/app
+      - /app/node_modules
+    env_file: .env
+    environment:
+      NODE_ENV: development
+      DB_HOST: postgres
+
+  # ── Seed (dev override) ───────────────────────────────────────
+  seed:
+    build:
+      context: .
+      target: dev
+    command: yarn seed
+    volumes:
+      - .:/app
+      - /app/node_modules
+    env_file: .env
+    environment:
+      NODE_ENV: development
+      DB_HOST: postgres
+
+  # ── LocalStack (S3 emulation) ─────────────────────────────────
+  localstack:
+    image: localstack/localstack:3
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3
+      DEFAULT_REGION: eu-central-1
+      LOCALSTACK_AUTH_TOKEN: ""
+    volumes:
+      - ./scripts/localstack-init.sh:/etc/localstack/init/ready.d/init.sh
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - public

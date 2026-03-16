@@ -25,8 +25,9 @@ export class OrdersController {
 
   @Post()
   async create(@Body() dto: CreateOrderDto, @Res() res: Response) {
-    const { order, created } = await this.ordersService.create(dto);
-    return res.status(created ? HttpStatus.CREATED : HttpStatus.OK).json(order);
+    const { order, created, payment } = await this.ordersService.create(dto);
+    const body = payment ? { ...order, payment } : order;
+    return res.status(created ? HttpStatus.CREATED : HttpStatus.OK).json(body);
   }
 
   @Get()

@@ -1,0 +1,52 @@
+# Dependencies — reinstalled inside container
+node_modules/
+.yarn/
+
+# Build artifacts — rebuilt inside container
+dist/
+coverage/
+
+# Git history — not needed in image
+.git/
+.gitignore
+.gitattributes
+
+# Environment files — injected via compose env_file / secrets
+.env
+.env.*
+!.env.example
+
+# Test files — not needed in runtime image
+test/
+**/*.spec.ts
+**/*.e2e-spec.ts
+
+# IDE and OS artifacts
+.idea/
+.vscode/
+*.DS_Store
+Thumbs.db
+
+# Docker files — not needed inside the image
+Dockerfile
+Dockerfile.*
+compose*.yml
+.dockerignore
+
+# Docs and local planning files
+*.md
+!README.md
+todo.md
+
+# TypeScript incremental build info — not needed in runtime
+*.tsbuildinfo
+
+# Logs
+*.log
+logs/
+
+# Schema — generated at runtime
+schema.gql
+
+# Scripts (unless needed at runtime; localstack-init not needed in prod)
+scripts/

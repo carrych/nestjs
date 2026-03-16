@@ -1,20 +1,28 @@
 import {
   BadRequestException,
   ConflictException,
+  GatewayTimeoutException,
+  HttpException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  OnModuleInit,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import type { ClientGrpc } from '@nestjs/microservices';
 import {
   DataSource,
-  In,
   LessThanOrEqual,
   MoreThanOrEqual,
   QueryFailedError,
   Repository,
 } from 'typeorm';
+import { firstValueFrom } from 'rxjs';
+import { Metadata, status as GrpcStatus } from '@grpc/grpc-js';
+import { randomUUID } from 'crypto';
 
 import { Order } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
@@ -23,6 +31,15 @@ import { OrderStatus } from './enums/order-status.enum';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { QueryOrderDto } from './dto/query-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { RabbitmqService } from '../rabbitmq/rabbitmq.service';
+import { OutboxService } from '../outbox/outbox.service';
+import { ProcessedMessage } from '../idempotency/processed-message.entity';
+import { OrdersProcessMessage } from './orders-queue.types';
+import { PAYMENTS_GRPC_CLIENT } from './orders.constants';
+import type {
+  AuthorizeResponse,
+  PaymentsGrpcClient,
+} from './payments-grpc-client.interfaces';
 
 // Valid status transitions: from → [allowed targets]
 const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -30,11 +47,15 @@ const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   [OrderStatus.PROCESSING]: [OrderStatus.COMPLETE, OrderStatus.CANCELED],
   [OrderStatus.COMPLETE]: [],
   [OrderStatus.CANCELED]: [],
+  [OrderStatus.PROCESSED]: [],
 };
 
 @Injectable()
-export class OrdersService {
+export class OrdersService implements OnModuleInit {
   private readonly logger = new Logger(OrdersService.name);
+  private paymentsGrpc: PaymentsGrpcClient;
+  // Typed as interface separately to avoid isolatedModules + emitDecoratorMetadata conflict
+  private readonly grpcClient: ClientGrpc;
 
   constructor(
     @InjectRepository(Order)
@@ -42,7 +63,16 @@ export class OrdersService {
     @InjectRepository(OrderItem)
     private readonly orderItemRepository: Repository<OrderItem>,
     private readonly dataSource: DataSource,
-  ) {}
+    private readonly rabbitmqService: RabbitmqService,
+    private readonly outboxService: OutboxService,
+    @Inject(PAYMENTS_GRPC_CLIENT) grpcClient: any,
+  ) {
+    this.grpcClient = grpcClient;
+  }
+
+  onModuleInit() {
+    this.paymentsGrpc = this.grpcClient.getService<PaymentsGrpcClient>('Payments');
+  }
 
   /**
    * Transactional order creation with:
@@ -50,7 +80,9 @@ export class OrdersService {
    * - Pessimistic locking on stocks (FOR NO KEY UPDATE) to prevent oversell
    * - Atomic: order + items + stock reservation in single transaction
    */
-  async create(dto: CreateOrderDto): Promise<{ order: Order; created: boolean }> {
+  async create(
+    dto: CreateOrderDto,
+  ): Promise<{ order: Order; created: boolean; payment: AuthorizeResponse | null }> {
     // 1. Idempotency check: return existing order if key already used
     if (dto.idempotencyKey) {
       const existing = await this.orderRepository.findOne({
@@ -58,7 +90,7 @@ export class OrdersService {
         relations: { items: true },
       });
       if (existing) {
-        return { order: existing, created: false };
+        return { order: existing, created: false, payment: null };
       }
     }
 
@@ -134,7 +166,27 @@ export class OrdersService {
       await queryRunner.commitTransaction();
       this.logger.log(`Order #${savedOrder.id} created (key: ${dto.idempotencyKey})`);
 
-      return { order: savedOrder, created: true };
+      // 9. Publish to queue (fire-and-forget — does not block the API response)
+      const message: OrdersProcessMessage = {
+        messageId: randomUUID(),
+        orderId: savedOrder.id,
+        attempt: 1,
+      };
+      this.rabbitmqService.publishToQueue('orders.process', message, {
+        messageId: message.messageId,
+      });
+
+      // 10. Authorize payment via gRPC (after commit to avoid holding DB transaction)
+      const totalAmount = dto.items
+        .reduce((sum, item) => sum + Number(item.price) * item.amount, 0)
+        .toFixed(2);
+      const payment = await this.authorizePayment(
+        savedOrder.id,
+        totalAmount,
+        dto.idempotencyKey,
+      );
+
+      return { order: savedOrder, created: true, payment };
     } catch (error) {
       await queryRunner.rollbackTransaction();
 
@@ -149,15 +201,12 @@ export class OrdersService {
           relations: { items: true },
         });
         if (existing) {
-          return { order: existing, created: false };
+          return { order: existing, created: false, payment: null };
         }
       }
 
-      // Rethrow business errors (ConflictException, etc.)
-      if (
-        error instanceof ConflictException ||
-        error instanceof BadRequestException
-      ) {
+      // Rethrow any HTTP exception (business errors + gRPC-mapped errors like 503/504)
+      if (error instanceof HttpException) {
         throw error;
       }
 
@@ -168,14 +217,80 @@ export class OrdersService {
     }
   }
 
-  async findAll(query: QueryOrderDto): Promise<Order[]> {
-    const { limit = 10, offset = 0, status, userId, dateFrom, dateTo } = query;
-    const where: Record<string, unknown> = {};
+  /**
+   * Calls Payments.Authorize via gRPC with a configurable deadline.
+   * Maps gRPC status codes → HTTP exceptions so callers get clean errors.
+   */
+  private async authorizePayment(
+    orderId: number,
+    amount: string,
+    idempotencyKey?: string | null,
+  ): Promise<AuthorizeResponse | null> {
+    const timeoutMs = Number(process.env.PAYMENTS_GRPC_TIMEOUT_MS ?? 5000);
+    const deadline = new Date(Date.now() + timeoutMs);
 
-    if (status) where.status = status;
-    if (userId) where.userId = userId;
-    if (dateFrom) where.createdAt = MoreThanOrEqual(new Date(dateFrom));
-    if (dateTo) where.createdAt = LessThanOrEqual(new Date(dateTo));
+    try {
+      const response = await firstValueFrom(
+        this.paymentsGrpc.authorize(
+          { orderId, amount, currency: 'UAH', idempotencyKey: idempotencyKey ?? undefined },
+          new Metadata(),
+          { deadline },
+        ),
+      );
+      this.logger.log(
+        `Payment authorized (orderId=${orderId}, paymentId=${response.paymentId}, status=${response.status})`,
+      );
+      return response;
+    } catch (err: any) {
+      const code = err?.code;
+      this.logger.error(`Payments.Authorize failed (orderId=${orderId}): ${err?.message}`);
+
+      if (code === GrpcStatus.DEADLINE_EXCEEDED) {
+        throw new GatewayTimeoutException('Payment service timed out');
+      }
+      if (code === GrpcStatus.UNAVAILABLE) {
+        throw new ServiceUnavailableException('Payment service unavailable');
+      }
+      throw new InternalServerErrorException('Payment authorization failed');
+    }
+  }
+
+  async processFromQueue(message: OrdersProcessMessage): Promise<void> {
+    await this.dataSource.transaction(async (manager) => {
+      try {
+        await manager.getRepository(ProcessedMessage).insert({
+          scope: 'orders.process',
+          messageId: message.messageId,
+          idempotencyKey: null,
+        });
+      } catch (err: any) {
+        if (String(err?.code) === '23505') {
+          return; // Already processed — idempotent skip
+        }
+        throw err;
+      }
+
+      if (message.simulate === 'alwaysFail') {
+        throw new Error('Simulated processing error');
+      }
+
+      const orderRepository = manager.getRepository(Order);
+      const order = await orderRepository.findOne({ where: { id: message.orderId } });
+      if (!order) {
+        throw new NotFoundException(`Order #${message.orderId} not found`);
+      }
+
+      order.status = OrderStatus.PROCESSED;
+      order.processedAt = new Date();
+      await orderRepository.save(order);
+
+      await this.outboxService.add('ORDER_PROCESSED', { orderId: order.id }, manager);
+    });
+  }
+
+  async findAll(query: QueryOrderDto): Promise<Order[]> {
+    const where = this.buildWhere(query);
+    const { limit = 10, offset = 0 } = query;
 
     return this.orderRepository.find({
       where,
@@ -184,6 +299,31 @@ export class OrdersService {
       take: limit,
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async findAllWithCount(query: QueryOrderDto): Promise<[Order[], number]> {
+    const where = this.buildWhere(query);
+    const { limit = 10, offset = 0 } = query;
+
+    return this.orderRepository.findAndCount({
+      where,
+      relations: { items: true },
+      skip: offset,
+      take: limit,
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  private buildWhere(query: QueryOrderDto): Record<string, unknown> {
+    const { status, userId, dateFrom, dateTo } = query;
+    const where: Record<string, unknown> = {};
+
+    if (status) where.status = status;
+    if (userId) where.userId = userId;
+    if (dateFrom) where.createdAt = MoreThanOrEqual(new Date(dateFrom));
+    if (dateTo) where.createdAt = LessThanOrEqual(new Date(dateTo));
+
+    return where;
   }
 
   async findOne(id: number): Promise<Order> {

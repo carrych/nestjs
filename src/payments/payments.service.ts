@@ -39,11 +39,8 @@ export class PaymentsService {
   }
 
   async findAll(query: QueryPaymentDto): Promise<Payment[]> {
-    const { limit = 10, offset = 0, orderId, status } = query;
-    const where: Record<string, unknown> = {};
-
-    if (orderId) where.orderId = orderId;
-    if (status) where.status = status;
+    const where = this.buildWhere(query);
+    const { limit = 10, offset = 0 } = query;
 
     return this.paymentRepository.find({
       where,
@@ -52,6 +49,29 @@ export class PaymentsService {
       take: limit,
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async findAllWithCount(query: QueryPaymentDto): Promise<[Payment[], number]> {
+    const where = this.buildWhere(query);
+    const { limit = 10, offset = 0 } = query;
+
+    return this.paymentRepository.findAndCount({
+      where,
+      relations: { order: true },
+      skip: offset,
+      take: limit,
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  private buildWhere(query: QueryPaymentDto): Record<string, unknown> {
+    const { orderId, status } = query;
+    const where: Record<string, unknown> = {};
+
+    if (orderId) where.orderId = orderId;
+    if (status) where.status = status;
+
+    return where;
   }
 
   async findOne(id: number): Promise<Payment> {
