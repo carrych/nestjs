@@ -1,0 +1,73 @@
+name: Deploy Production
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: 'Full commit SHA to deploy (image must already exist in GHCR)'
+        required: true
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy-prod:
+    name: Deploy to Production
+    runs-on: [self-hosted, prod]
+
+    environment:
+      name: production
+      url: http://localhost:8080/health
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: tag
+        run: |
+          SHA="${{ github.event.inputs.commit_sha || github.sha }}"
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${{ github.repository_owner }}/nestjs-ecommerce:sha-${SHA}" >> "$GITHUB_OUTPUT"
+
+      - run: |
+          echo "Environment: production"
+          echo "Commit SHA:  ${{ steps.tag.outputs.sha }}"
+          echo "Image:       ${{ steps.tag.outputs.image }}"
+          echo "Triggered:   ${{ github.event_name }}"
+          echo "Actor:       ${{ github.actor }}"
+
+      - run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Deploy
+        env:
+          DEPLOY_IMAGE: ${{ steps.tag.outputs.image }}
+          COMPOSE_PROJECT_NAME: nestjs-prod
+          API_PORT: "8080"
+          DB_NAME: ${{ secrets.PROD_DB_NAME }}
+          DB_USER: ${{ secrets.PROD_DB_USER }}
+          DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
+          JWT_EXPIRES_IN: "7d"
+          AWS_ACCESS_KEY_ID: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.PROD_AWS_REGION }}
+          AWS_S3_BUCKET: ${{ secrets.PROD_AWS_S3_BUCKET }}
+          NP_API_KEY: ${{ secrets.PROD_NP_API_KEY }}
+          UKRPOSHTA_TOKEN: ${{ secrets.PROD_UKRPOSHTA_TOKEN }}
+          RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+        run: ./scripts/deploy.sh prod
+
+      - name: Smoke test
+        run: |
+          curl --fail --retry 6 --retry-delay 5 --retry-connrefused \
+            http://localhost:8080/health
+
+      - if: always()
+        run: |
+          echo "Environment: production"
+          echo "Commit SHA:  ${{ steps.tag.outputs.sha }}"
+          echo "Image:       ${{ steps.tag.outputs.image }}"
+          echo "Result:      ${{ job.status }}"
+          echo "Time:        $(date -u +%Y-%m-%dT%H:%M:%SZ)"
