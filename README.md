@@ -18,6 +18,111 @@ NestJS v11 e-commerce backend with TypeORM, PostgreSQL, GraphQL, JWT auth, and S
 
 ---
 
+## CI/CD Pipeline
+
+Full GitHub Actions pipeline: PR checks → Build → Stage → Production.
+
+### Branch Strategy
+
+```
+feature/* ──PR──▶ develop ──merge──▶ master
+                    │                   │
+             auto-deploy            manual-approval
+              to stage             + deploy to prod
+```
+
+| Branch | Trigger | Action |
+|--------|---------|--------|
+| `feature/*` | PR to `develop` or `master` | PR checks (lint + tests + docker build) |
+| `develop` | push / merge | Build image → GHCR → deploy stage |
+| `master` | push / merge | Manual approval → deploy prod (same image) |
+
+### Workflows
+
+| File | Trigger | Jobs |
+|------|---------|------|
+| `.github/workflows/pr-checks.yml` | PR to `develop`, `master` | lint, unit-tests, docker-build-check |
+| `.github/workflows/build-and-stage.yml` | push to `develop` | build+push image, create manifest, deploy stage |
+| `.github/workflows/deploy-prod.yml` | push to `master` | deploy prod (requires manual approval) |
+
+### Immutable Tags
+
+Every image is tagged `sha-<full-commit-sha>`. The same tag flows from build → stage → prod — no rebuild at any point.
+
+```
+build job creates:  ghcr.io/owner/nestjs-ecommerce:sha-abc123def
+stage deploy uses:  ghcr.io/owner/nestjs-ecommerce:sha-abc123def
+prod deploy uses:   ghcr.io/owner/nestjs-ecommerce:sha-abc123def  ← same image
+```
+
+### Release Manifest
+
+Created during build, uploaded as a GitHub artifact:
+
+```json
+{
+  "commit": "abc123def...",
+  "branch": "develop",
+  "buildTime": "2025-01-15T10:30:00Z",
+  "services": {
+    "nestjs-ecommerce": {
+      "image": "ghcr.io/owner/nestjs-ecommerce:sha-abc123def...",
+      "digest": "sha256:..."
+    }
+  }
+}
+```
+
+### GitHub Environments Setup
+
+Create two environments in **Settings → Environments**:
+
+**`stage`**
+- Secrets: `STAGE_DB_NAME`, `STAGE_DB_USER`, `STAGE_DB_PASSWORD`, `STAGE_JWT_SECRET`, etc.
+- No required reviewers (auto-deploy)
+
+**`production`**
+- Secrets: `PROD_DB_NAME`, `PROD_DB_USER`, `PROD_DB_PASSWORD`, `PROD_JWT_SECRET`, etc.
+- Required reviewers: add at least one (triggers approval UI before deploy)
+- Prevent concurrent deploys via `concurrency: group: production-deploy`
+
+### Self-Hosted Runner Setup
+
+The deploy jobs require a self-hosted runner. Minimum setup with Docker Compose:
+
+```bash
+# Register runner on the target machine
+# GitHub → Settings → Actions → Runners → New self-hosted runner
+# Follow the registration steps, then add labels:
+./config.sh --labels stage   # for stage runner
+./config.sh --labels prod    # for prod runner
+./run.sh &
+```
+
+Stage and prod run as separate Compose projects on the same machine:
+
+| Project | Port | Compose project name |
+|---------|------|---------------------|
+| stage | 8081 | `nestjs-stage` |
+| prod | 8080 | `nestjs-prod` |
+
+### Deploy Flow
+
+```bash
+# Triggered automatically by scripts/deploy.sh:
+# 1. docker pull ghcr.io/owner/nestjs-ecommerce:sha-<commit>
+# 2. docker compose -p nestjs-{stage|prod} -f compose.deploy.yml up -d postgres rabbitmq
+# 3. docker compose run --rm migrate         (runs TypeORM migrations)
+# 4. docker compose up -d --no-build api    (starts API with pulled image)
+# 5. curl http://localhost:{8081|8080}/health  (smoke test)
+```
+
+### Composite Action
+
+`.github/actions/setup-yarn/action.yml` is a reusable composite action used by all workflow jobs to enable corepack, activate Yarn 4.6.0, and install dependencies with `--immutable`.
+
+---
+
 ## Quick Start
 
 ### 1. Prepare environment
