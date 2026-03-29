@@ -91,6 +91,7 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 COPY --chown=appuser:appgroup --from=build /app/dist ./dist
 COPY --chown=appuser:appgroup --from=prod-deps /app/node_modules ./node_modules
 COPY --chown=appuser:appgroup package.json ./
+COPY --chown=appuser:appgroup proto/ ./proto/
 
 USER appuser
 
@@ -117,6 +118,7 @@ WORKDIR /app
 COPY --from=build /app/dist ./dist
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY package.json ./
+COPY proto/ ./proto/
 
 # /tmp is writable in distroless; NestJS GraphQL writes schema here
 ENV GRAPHQL_SCHEMA_PATH=/tmp/schema.gql
