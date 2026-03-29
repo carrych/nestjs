@@ -92,7 +92,6 @@ services:
   migrate:
     image: ${DEPLOY_IMAGE}
     command:
-      - node
       - node_modules/typeorm/cli.js
       - migration:run
       - -d
