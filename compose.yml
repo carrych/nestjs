@@ -166,6 +166,10 @@ services:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
       PORT: "3001"
       PUBLIC_INVOICE_URL: http://invoice-service:3001
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-eu-central-1}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
     ports:
       - "3001:3001"     # exposed for PDF/QR access from host
     networks:
