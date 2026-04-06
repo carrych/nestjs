@@ -79,6 +79,7 @@ services:
       GRAPHQL_SCHEMA_PATH: /tmp/schema.gql
       # Override DB_HOST: in Docker, postgres is the service name, not "localhost"
       DB_HOST: postgres
+      PAYMENTS_GRPC_URL: "payments-grpc:50051"
     ports:
       - "8080:3000"     # host:container — only api is reachable from host
     networks:
@@ -89,6 +90,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      payments-grpc:
+        condition: service_started
     # distroless has no shell/curl/wget — use node's built-in http module.
     # /nodejs/bin/node is the absolute path to node in the distroless image.
     healthcheck:
@@ -130,6 +133,26 @@ services:
     restart: "no"
     profiles:
       - tools
+
+  # ── Payments gRPC ────────────────────────────────────────────────
+  # Separate scalable container for payment processing (Authorize/Capture/Refund).
+  # Scale independently: docker compose up --scale payments-grpc=3
+  payments-grpc:
+    build:
+      context: .
+      target: payments-grpc
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      PAYMENTS_GRPC_PORT: "50051"
+      PAYMENTS_GRPC_URL: "payments-grpc:50051"
+    networks:
+      - backend           # internal only — gRPC is service-to-service, not public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
   # ── Invoice Service ──────────────────────────────────────────────
   invoice-service:
