@@ -11,6 +11,9 @@ export interface StatusChangeEvent {
   orderId: number;
   status: string;
   updatedAt: string;
+  // Only present for invoice events
+  documentUrl?: string;
+  qrCodeDataUrl?: string;
 }
 
 @Injectable()
