@@ -131,6 +131,49 @@ services:
     profiles:
       - tools
 
+  # ── Invoice Service ──────────────────────────────────────────────
+  invoice-service:
+    build:
+      context: ../invoice-service
+      target: prod
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      PORT: "3001"
+      PUBLIC_INVOICE_URL: http://invoice-service:3001
+    ports:
+      - "3001:3001"     # exposed for PDF/QR access from host
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── WS Service ───────────────────────────────────────────────────
+  ws-service:
+    build:
+      context: ../ws-service
+      target: prod
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      PORT: "3002"
+    ports:
+      - "3002:3002"     # Socket.IO port exposed to clients
+    networks:
+      - backend
+      - public           # clients connect from outside
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
   # ── Seed (one-off job) ───────────────────────────────────────────
   # Run manually: docker compose run --rm seed
   # ALLOW_SEED=true bypasses the production guard in seed.ts
