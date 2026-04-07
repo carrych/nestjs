@@ -15,9 +15,7 @@ export async function getAuthToken(
   password: string,
 ): Promise<string> {
   // Try login first
-  const loginRes = await request(app.getHttpServer())
-    .post('/auth/login')
-    .send({ email, password });
+  const loginRes = await request(app.getHttpServer()).post('/auth/login').send({ email, password });
 
   if (loginRes.status === 200) {
     return loginRes.body.accessToken as string;
@@ -26,9 +24,7 @@ export async function getAuthToken(
   // Register if not exists
   await request(app.getHttpServer()).post('/users').send({ email, password });
 
-  const res = await request(app.getHttpServer())
-    .post('/auth/login')
-    .send({ email, password });
+  const res = await request(app.getHttpServer()).post('/auth/login').send({ email, password });
 
   if (!res.body.accessToken) {
     throw new Error(`Failed to get auth token for ${email}: ${JSON.stringify(res.body)}`);

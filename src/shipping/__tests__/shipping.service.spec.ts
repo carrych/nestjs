@@ -74,7 +74,12 @@ describe('ShippingService', () => {
       mockOrderRepo.findOne.mockResolvedValue(null);
 
       await expect(
-        service.create({ orderId: 99, userId: 1, declaredValue: 100, status: ShippingStatus.PENDING }),
+        service.create({
+          orderId: 99,
+          userId: 1,
+          declaredValue: 100,
+          status: ShippingStatus.PENDING,
+        }),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -109,7 +114,12 @@ describe('ShippingService', () => {
       mockInvoiceClient.send.mockReturnValue(throwError(() => new Error('RMQ down')));
 
       await expect(
-        service.create({ orderId: 10, userId: 5, declaredValue: 100, status: ShippingStatus.PENDING }),
+        service.create({
+          orderId: 10,
+          userId: 5,
+          declaredValue: 100,
+          status: ShippingStatus.PENDING,
+        }),
       ).resolves.toBeDefined();
     });
   });

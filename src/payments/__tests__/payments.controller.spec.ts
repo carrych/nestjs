@@ -99,7 +99,9 @@ describe('PaymentsController — gRPC endpoints', () => {
 
   describe('getStatus()', () => {
     it('delegates to gRPC getPaymentStatus', () => {
-      mockGrpcService.getPaymentStatus.mockReturnValue(of({ paymentId: 'uuid-1', status: 'RECEIVED' }));
+      mockGrpcService.getPaymentStatus.mockReturnValue(
+        of({ paymentId: 'uuid-1', status: 'RECEIVED' }),
+      );
 
       controller.getStatus('uuid-1');
 

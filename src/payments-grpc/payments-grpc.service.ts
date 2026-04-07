@@ -54,7 +54,9 @@ export class PaymentsGrpcService {
     });
 
     const saved = await this.paymentRepository.save(payment);
-    this.logger.log(`Authorize ok (paymentId=${saved.transactionNumber}, orderId=${orderId}, amount=${amount})`);
+    this.logger.log(
+      `Authorize ok (paymentId=${saved.transactionNumber}, orderId=${orderId}, amount=${amount})`,
+    );
     return this.toRecord(saved, currency);
   }
 

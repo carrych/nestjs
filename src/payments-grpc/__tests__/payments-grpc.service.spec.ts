@@ -66,7 +66,10 @@ describe('PaymentsGrpcService', () => {
     });
 
     it('returns existing record when idempotency key matches', async () => {
-      const existing = makePayment({ transactionNumber: 'idem-key', status: PaymentStatus.PENDING });
+      const existing = makePayment({
+        transactionNumber: 'idem-key',
+        status: PaymentStatus.PENDING,
+      });
       mockRepo.findOne.mockResolvedValue(existing);
 
       const record = await service.authorize(1, '100.00', 'UAH', 'idem-key');

@@ -9,7 +9,9 @@ import { PaymentRecord } from '../payments-grpc.service';
 
 describe('PaymentsGrpcController', () => {
   let controller: PaymentsGrpcController;
-  let service: jest.Mocked<Pick<PaymentsGrpcService, 'authorize' | 'getStatus' | 'capture' | 'refund'>>;
+  let service: jest.Mocked<
+    Pick<PaymentsGrpcService, 'authorize' | 'getStatus' | 'capture' | 'refund'>
+  >;
 
   beforeEach(async () => {
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
@@ -35,7 +37,13 @@ describe('PaymentsGrpcController', () => {
 
   describe('authorize()', () => {
     it('returns paymentId and status from service', async () => {
-      const record: PaymentRecord = { paymentId: 'pay-uuid-1', orderId: 1, amount: '100.00', currency: 'UAH', status: 'PENDING' };
+      const record: PaymentRecord = {
+        paymentId: 'pay-uuid-1',
+        orderId: 1,
+        amount: '100.00',
+        currency: 'UAH',
+        status: 'PENDING',
+      };
       service.authorize.mockResolvedValue(record);
 
       const result = await controller.authorize({ orderId: 1, amount: '100.00', currency: 'UAH' });
@@ -44,16 +52,33 @@ describe('PaymentsGrpcController', () => {
     });
 
     it('passes idempotencyKey to service when provided', async () => {
-      const record: PaymentRecord = { paymentId: 'pay-uuid-2', orderId: 2, amount: '50.00', currency: 'UAH', status: 'PENDING' };
+      const record: PaymentRecord = {
+        paymentId: 'pay-uuid-2',
+        orderId: 2,
+        amount: '50.00',
+        currency: 'UAH',
+        status: 'PENDING',
+      };
       service.authorize.mockResolvedValue(record);
 
-      await controller.authorize({ orderId: 2, amount: '50.00', currency: 'UAH', idempotencyKey: 'order-key-abc' });
+      await controller.authorize({
+        orderId: 2,
+        amount: '50.00',
+        currency: 'UAH',
+        idempotencyKey: 'order-key-abc',
+      });
 
       expect(service.authorize).toHaveBeenCalledWith(2, '50.00', 'UAH', 'order-key-abc');
     });
 
     it('calls service without idempotencyKey when not provided', async () => {
-      const record: PaymentRecord = { paymentId: 'pay-uuid-3', orderId: 3, amount: '75.00', currency: 'UAH', status: 'PENDING' };
+      const record: PaymentRecord = {
+        paymentId: 'pay-uuid-3',
+        orderId: 3,
+        amount: '75.00',
+        currency: 'UAH',
+        status: 'PENDING',
+      };
       service.authorize.mockResolvedValue(record);
 
       await controller.authorize({ orderId: 3, amount: '75.00', currency: 'UAH' });
@@ -66,7 +91,13 @@ describe('PaymentsGrpcController', () => {
 
   describe('getPaymentStatus()', () => {
     it('returns paymentId and status for a known payment', async () => {
-      const record: PaymentRecord = { paymentId: 'pay-uuid-1', orderId: 1, amount: '100.00', currency: 'UAH', status: 'PENDING' };
+      const record: PaymentRecord = {
+        paymentId: 'pay-uuid-1',
+        orderId: 1,
+        amount: '100.00',
+        currency: 'UAH',
+        status: 'PENDING',
+      };
       service.getStatus.mockResolvedValue(record);
 
       const result = await controller.getPaymentStatus({ paymentId: 'pay-uuid-1' });
@@ -77,7 +108,9 @@ describe('PaymentsGrpcController', () => {
     it('throws RpcException with NOT_FOUND for unknown paymentId', async () => {
       service.getStatus.mockResolvedValue(undefined);
 
-      await expect(controller.getPaymentStatus({ paymentId: 'ghost-id' })).rejects.toThrow(RpcException);
+      await expect(controller.getPaymentStatus({ paymentId: 'ghost-id' })).rejects.toThrow(
+        RpcException,
+      );
 
       try {
         await controller.getPaymentStatus({ paymentId: 'ghost-id' });
@@ -93,7 +126,13 @@ describe('PaymentsGrpcController', () => {
 
   describe('capture()', () => {
     it('returns RECEIVED status after capture', async () => {
-      const record: PaymentRecord = { paymentId: 'pay-uuid-1', orderId: 1, amount: '100.00', currency: 'UAH', status: 'RECEIVED' };
+      const record: PaymentRecord = {
+        paymentId: 'pay-uuid-1',
+        orderId: 1,
+        amount: '100.00',
+        currency: 'UAH',
+        status: 'RECEIVED',
+      };
       service.capture.mockResolvedValue(record);
 
       const result = await controller.capture({ paymentId: 'pay-uuid-1' });
@@ -112,7 +151,13 @@ describe('PaymentsGrpcController', () => {
 
   describe('refund()', () => {
     it('returns new refund payment record', async () => {
-      const record: PaymentRecord = { paymentId: 'refund-uuid', orderId: 1, amount: '50.00', currency: 'UAH', status: 'RECEIVED' };
+      const record: PaymentRecord = {
+        paymentId: 'refund-uuid',
+        orderId: 1,
+        amount: '50.00',
+        currency: 'UAH',
+        status: 'RECEIVED',
+      };
       service.refund.mockResolvedValue(record);
 
       const result = await controller.refund({ paymentId: 'pay-uuid-1', amount: '50.00' });

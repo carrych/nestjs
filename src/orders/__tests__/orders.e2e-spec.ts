@@ -82,9 +82,7 @@ describe('OrdersController (e2e)', () => {
     });
 
     it('should filter orders by status=pending', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/orders')
-        .query({ status: 'pending' });
+      const res = await request(app.getHttpServer()).get('/orders').query({ status: 'pending' });
 
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
@@ -95,9 +93,7 @@ describe('OrdersController (e2e)', () => {
     });
 
     it('should filter orders by userId', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/orders')
-        .query({ userId: 1 });
+      const res = await request(app.getHttpServer()).get('/orders').query({ userId: 1 });
 
       expect(res.status).toBe(200);
       for (const order of res.body) {
@@ -106,9 +102,7 @@ describe('OrdersController (e2e)', () => {
     });
 
     it('should respect limit and offset', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/orders')
-        .query({ limit: 2, offset: 0 });
+      const res = await request(app.getHttpServer()).get('/orders').query({ limit: 2, offset: 0 });
 
       expect(res.status).toBe(200);
       expect(res.body.length).toBeLessThanOrEqual(2);
@@ -154,14 +148,10 @@ describe('OrdersController (e2e)', () => {
       const dto = {
         userId: 1,
         idempotencyKey,
-        items: [
-          { productId: 4, amount: 1, price: 12999 },
-        ],
+        items: [{ productId: 4, amount: 1, price: 12999 }],
       };
 
-      const res = await request(app.getHttpServer())
-        .post('/orders')
-        .send(dto);
+      const res = await request(app.getHttpServer()).post('/orders').send(dto);
 
       expect(res.status).toBe(201);
       expect(res.body).toHaveProperty('id');
@@ -181,21 +171,15 @@ describe('OrdersController (e2e)', () => {
       const dto = {
         userId: 1,
         idempotencyKey,
-        items: [
-          { productId: 5, amount: 1, price: 4299 },
-        ],
+        items: [{ productId: 5, amount: 1, price: 4299 }],
       };
 
       // First request -> 201
-      const first = await request(app.getHttpServer())
-        .post('/orders')
-        .send(dto);
+      const first = await request(app.getHttpServer()).post('/orders').send(dto);
       expect(first.status).toBe(201);
 
       // Second request with same key -> 200 (idempotent)
-      const second = await request(app.getHttpServer())
-        .post('/orders')
-        .send(dto);
+      const second = await request(app.getHttpServer()).post('/orders').send(dto);
       expect(second.status).toBe(200);
       expect(second.body.id).toBe(first.body.id);
     });
@@ -209,9 +193,7 @@ describe('OrdersController (e2e)', () => {
         ],
       };
 
-      const res = await request(app.getHttpServer())
-        .post('/orders')
-        .send(dto);
+      const res = await request(app.getHttpServer()).post('/orders').send(dto);
 
       expect(res.status).toBe(409);
       expect(res.body).toHaveProperty('message');
@@ -219,20 +201,16 @@ describe('OrdersController (e2e)', () => {
     });
 
     it('should return 400 when items array is empty', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/orders')
-        .send({
-          userId: 1,
-          items: [],
-        });
+      const res = await request(app.getHttpServer()).post('/orders').send({
+        userId: 1,
+        items: [],
+      });
 
       expect(res.status).toBe(400);
     });
 
     it('should return 400 when required fields are missing', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/orders')
-        .send({});
+      const res = await request(app.getHttpServer()).post('/orders').send({});
 
       expect(res.status).toBe(400);
     });

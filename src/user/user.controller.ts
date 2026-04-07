@@ -76,10 +76,7 @@ export class UserController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @Patch(':id/role')
-  setRole(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: AssignRoleDto,
-  ): Promise<User> {
+  setRole(@Param('id', ParseIntPipe) id: number, @Body() dto: AssignRoleDto): Promise<User> {
     return this.userService.setRole(id, dto.role);
   }
 

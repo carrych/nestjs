@@ -144,9 +144,7 @@ describe('FilesService', () => {
     });
 
     it('throws BadRequestException if upload window expired', async () => {
-      mockRepo.findOne.mockResolvedValue(
-        makeFile({ expiresAt: new Date(Date.now() - 1000) }),
-      );
+      mockRepo.findOne.mockResolvedValue(makeFile({ expiresAt: new Date(Date.now() - 1000) }));
       await expect(service.complete('file-uuid-1', 1)).rejects.toThrow(BadRequestException);
     });
 

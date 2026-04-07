@@ -82,11 +82,7 @@ export class ShippingService {
     });
   }
 
-  async findAllWithCount(
-    orderId?: number,
-    limit = 10,
-    offset = 0,
-  ): Promise<[Shipping[], number]> {
+  async findAllWithCount(orderId?: number, limit = 10, offset = 0): Promise<[Shipping[], number]> {
     const where: Record<string, unknown> = {};
     if (orderId) where.orderId = orderId;
 

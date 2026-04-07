@@ -36,10 +36,7 @@ import { OutboxService } from '../outbox/outbox.service';
 import { ProcessedMessage } from '../idempotency/processed-message.entity';
 import { OrdersProcessMessage } from './orders-queue.types';
 import { PAYMENTS_GRPC_CLIENT } from './orders.constants';
-import type {
-  AuthorizeResponse,
-  PaymentsGrpcClient,
-} from './payments-grpc-client.interfaces';
+import type { AuthorizeResponse, PaymentsGrpcClient } from './payments-grpc-client.interfaces';
 
 // Valid status transitions: from → [allowed targets]
 const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -67,7 +64,7 @@ export class OrdersService implements OnModuleInit {
     private readonly outboxService: OutboxService,
     @Inject(PAYMENTS_GRPC_CLIENT) grpcClient: any,
   ) {
-    this.grpcClient = grpcClient;
+    this.grpcClient = grpcClient as ClientGrpc;
   }
 
   onModuleInit() {
@@ -112,17 +109,13 @@ export class OrdersService implements OnModuleInit {
         .setLock('pessimistic_write')
         .getMany();
 
-      const stockByProductId = new Map(
-        lockedStocks.map((s) => [Number(s.productId), s]),
-      );
+      const stockByProductId = new Map(lockedStocks.map((s) => [Number(s.productId), s]));
 
       // 4. Validate stock availability: (stock - reserved) >= requested amount
       for (const item of dto.items) {
         const stock = stockByProductId.get(item.productId);
         if (!stock) {
-          throw new ConflictException(
-            `No stock record for product #${item.productId}`,
-          );
+          throw new ConflictException(`No stock record for product #${item.productId}`);
         }
 
         const available = stock.stock - stock.reserved;
@@ -152,9 +145,7 @@ export class OrdersService implements OnModuleInit {
           discount: String(item.discount ?? 0),
         }),
       );
-      savedOrder.items = await queryRunner.manager
-        .getRepository(OrderItem)
-        .save(orderItems);
+      savedOrder.items = await queryRunner.manager.getRepository(OrderItem).save(orderItems);
 
       // 7. Update stock: reserved += item.amount
       for (const item of dto.items) {
@@ -182,11 +173,7 @@ export class OrdersService implements OnModuleInit {
       const totalAmount = dto.items
         .reduce((sum, item) => sum + Number(item.price) * item.amount, 0)
         .toFixed(2);
-      const payment = await this.authorizePayment(
-        savedOrder.id,
-        totalAmount,
-        dto.idempotencyKey,
-      );
+      const payment = await this.authorizePayment(savedOrder.id, totalAmount, dto.idempotencyKey);
 
       return { order: savedOrder, created: true, payment };
     } catch (error) {
@@ -197,7 +184,7 @@ export class OrdersService implements OnModuleInit {
       // Handle race condition: another request inserted the same idempotencyKey
       if (
         error instanceof QueryFailedError &&
-        (error as any).code === '23505' &&
+        (error as { code?: string }).code === '23505' &&
         dto.idempotencyKey
       ) {
         const existing = await this.orderRepository.findOne({
@@ -245,9 +232,12 @@ export class OrdersService implements OnModuleInit {
         `Payment authorized (orderId=${orderId}, paymentId=${response.paymentId}, status=${response.status})`,
       );
       return response;
-    } catch (err: any) {
-      const code = err?.code;
-      this.logger.error(`Payments.Authorize failed (orderId=${orderId}): ${err?.message}`);
+    } catch (err: unknown) {
+      const grpcErr = err as { code?: number; message?: string };
+      const code = grpcErr?.code;
+      this.logger.error(
+        `Payments.Authorize failed (orderId=${orderId}): ${String(grpcErr?.message ?? '')}`,
+      );
 
       if (code === GrpcStatus.DEADLINE_EXCEEDED) {
         throw new GatewayTimeoutException('Payment service timed out');
@@ -267,8 +257,8 @@ export class OrdersService implements OnModuleInit {
           messageId: message.messageId,
           idempotencyKey: null,
         });
-      } catch (err: any) {
-        if (String(err?.code) === '23505') {
+      } catch (err: unknown) {
+        if (String((err as { code?: string }).code) === '23505') {
           return; // Already processed — idempotent skip
         }
         throw err;
@@ -346,9 +336,7 @@ export class OrdersService implements OnModuleInit {
     const allowed = STATUS_TRANSITIONS[order.status];
 
     if (!allowed.includes(dto.status)) {
-      throw new BadRequestException(
-        `Cannot transition from '${order.status}' to '${dto.status}'`,
-      );
+      throw new BadRequestException(`Cannot transition from '${order.status}' to '${dto.status}'`);
     }
 
     order.status = dto.status;

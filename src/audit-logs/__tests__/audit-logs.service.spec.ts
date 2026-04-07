@@ -31,10 +31,7 @@ describe('AuditLogsService', () => {
     jest.clearAllMocks();
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        AuditLogsService,
-        { provide: getRepositoryToken(AuditLog), useValue: mockRepo },
-      ],
+      providers: [AuditLogsService, { provide: getRepositoryToken(AuditLog), useValue: mockRepo }],
     }).compile();
 
     service = module.get(AuditLogsService);
@@ -60,9 +57,7 @@ describe('AuditLogsService', () => {
       mockRepo.create.mockReturnValue({});
       mockRepo.save.mockRejectedValue(new Error('DB down'));
 
-      expect(() =>
-        service.log({ action: 'CREATE_PRODUCT' }),
-      ).not.toThrow();
+      expect(() => service.log({ action: 'CREATE_PRODUCT' })).not.toThrow();
 
       // allow the rejection to be handled silently
       await Promise.resolve();
@@ -89,9 +84,7 @@ describe('AuditLogsService', () => {
 
       await service.findAll({ limit: 999, offset: 0 });
 
-      expect(mockRepo.findAndCount).toHaveBeenCalledWith(
-        expect.objectContaining({ take: 100 }),
-      );
+      expect(mockRepo.findAndCount).toHaveBeenCalledWith(expect.objectContaining({ take: 100 }));
     });
 
     it('minimum limit is 1', async () => {
@@ -99,9 +92,7 @@ describe('AuditLogsService', () => {
 
       await service.findAll({ limit: 0, offset: 0 });
 
-      expect(mockRepo.findAndCount).toHaveBeenCalledWith(
-        expect.objectContaining({ take: 1 }),
-      );
+      expect(mockRepo.findAndCount).toHaveBeenCalledWith(expect.objectContaining({ take: 1 }));
     });
 
     it('filters by action', async () => {

@@ -69,7 +69,10 @@ export class PaymentsGrpcController {
   }
 
   @GrpcMethod('Payments', 'Refund')
-  async refund(req: { paymentId: string; amount: string }): Promise<{ paymentId: string; status: string }> {
+  async refund(req: {
+    paymentId: string;
+    amount: string;
+  }): Promise<{ paymentId: string; status: string }> {
     this.logger.log(`Refund (paymentId=${req.paymentId}, amount=${req.amount})`);
     const record = await this.service.refund(req.paymentId, req.amount);
     return { paymentId: record.paymentId, status: record.status };

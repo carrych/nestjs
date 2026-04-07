@@ -12,10 +12,7 @@ describe('PaymentsResolver', () => {
     paymentsService = { findAllWithCount: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        PaymentsResolver,
-        { provide: PaymentsService, useValue: paymentsService },
-      ],
+      providers: [PaymentsResolver, { provide: PaymentsService, useValue: paymentsService }],
     }).compile();
 
     resolver = module.get<PaymentsResolver>(PaymentsResolver);

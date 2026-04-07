@@ -146,9 +146,7 @@ describe('ShippingController (e2e)', () => {
         status: 'pending',
       };
 
-      const res = await request(app.getHttpServer())
-        .post('/shipping')
-        .send(dto);
+      const res = await request(app.getHttpServer()).post('/shipping').send(dto);
 
       expect(res.status).toBe(201);
       expect(res.body).toHaveProperty('id');
@@ -159,22 +157,18 @@ describe('ShippingController (e2e)', () => {
     });
 
     it('should return 404 when orderId does not exist', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/shipping')
-        .send({
-          orderId: 99999,
-          userId: 1,
-          declaredValue: 1000,
-        });
+      const res = await request(app.getHttpServer()).post('/shipping').send({
+        orderId: 99999,
+        userId: 1,
+        declaredValue: 1000,
+      });
 
       expect(res.status).toBe(404);
       expect(res.body).toHaveProperty('message');
     });
 
     it('should return 400 when required fields are missing', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/shipping')
-        .send({ userId: 1 });
+      const res = await request(app.getHttpServer()).post('/shipping').send({ userId: 1 });
 
       expect(res.status).toBe(400);
     });
@@ -186,14 +180,12 @@ describe('ShippingController (e2e)', () => {
   describe('PATCH /shipping/:id', () => {
     it('should update shipping tracking number', async () => {
       const orderId = await createTestOrder();
-      const createRes = await request(app.getHttpServer())
-        .post('/shipping')
-        .send({
-          orderId,
-          userId: 1,
-          declaredValue: 1000,
-          status: 'pending',
-        });
+      const createRes = await request(app.getHttpServer()).post('/shipping').send({
+        orderId,
+        userId: 1,
+        declaredValue: 1000,
+        status: 'pending',
+      });
       const shippingId = createRes.body.id;
 
       const res = await request(app.getHttpServer())
@@ -206,14 +198,12 @@ describe('ShippingController (e2e)', () => {
 
     it('should set receivedAt when status changes to received', async () => {
       const orderId = await createTestOrder();
-      const createRes = await request(app.getHttpServer())
-        .post('/shipping')
-        .send({
-          orderId,
-          userId: 1,
-          declaredValue: 2000,
-          status: 'pending',
-        });
+      const createRes = await request(app.getHttpServer()).post('/shipping').send({
+        orderId,
+        userId: 1,
+        declaredValue: 2000,
+        status: 'pending',
+      });
       const shippingId = createRes.body.id;
 
       // Confirm receivedAt is not set initially
@@ -246,13 +236,11 @@ describe('ShippingController (e2e)', () => {
   describe('DELETE /shipping/:id', () => {
     it('should delete a shipping record and return 204', async () => {
       const orderId = await createTestOrder();
-      const createRes = await request(app.getHttpServer())
-        .post('/shipping')
-        .send({
-          orderId,
-          userId: 1,
-          declaredValue: 500,
-        });
+      const createRes = await request(app.getHttpServer()).post('/shipping').send({
+        orderId,
+        userId: 1,
+        declaredValue: 500,
+      });
       const shippingId = createRes.body.id;
 
       const res = await request(app.getHttpServer()).delete(`/shipping/${shippingId}`);

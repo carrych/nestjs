@@ -49,18 +49,17 @@ function makeStock(productId: number, stock = 100, reserved = 0) {
 
 // ─── QueryRunner mock factory ─────────────────────────────────────────────────
 
-function makeQueryRunner(
-  stockRows: Stock[],
-  savedOrder: Order,
-  savedItems: OrderItem[] = [],
-) {
+function makeQueryRunner(stockRows: Stock[], savedOrder: Order, savedItems: OrderItem[] = []) {
   const processedRepo = { insert: jest.fn().mockResolvedValue(undefined) };
   const orderRepo = {
     create: jest.fn().mockReturnValue(savedOrder),
     save: jest.fn().mockResolvedValue(savedOrder),
     findOne: jest.fn().mockResolvedValue(savedOrder),
   };
-  const orderItemRepo = { create: jest.fn().mockReturnValue({}), save: jest.fn().mockResolvedValue(savedItems) };
+  const orderItemRepo = {
+    create: jest.fn().mockReturnValue({}),
+    save: jest.fn().mockResolvedValue(savedItems),
+  };
   const stockRepo = { createQueryBuilder: jest.fn(), save: jest.fn().mockResolvedValue(undefined) };
 
   const qb = {
@@ -97,9 +96,7 @@ function makeQueryRunner(
 const mockPaymentResponse = { paymentId: 'pay-uuid-1', status: 'AUTHORIZED' };
 
 function makeMockPaymentsGrpc(authorizeImpl?: () => unknown) {
-  const authorize = jest.fn().mockImplementation(
-    authorizeImpl ?? (() => of(mockPaymentResponse)),
-  );
+  const authorize = jest.fn().mockImplementation(authorizeImpl ?? (() => of(mockPaymentResponse)));
   const grpcService = { authorize };
   const grpcClient = { getService: jest.fn().mockReturnValue(grpcService) };
   return { grpcClient, grpcService };
@@ -109,7 +106,13 @@ function makeMockPaymentsGrpc(authorizeImpl?: () => unknown) {
 
 describe('OrdersService', () => {
   let service: OrdersService;
-  let orderRepository: { findOne: jest.Mock; find: jest.Mock; findAndCount: jest.Mock; save: jest.Mock; remove: jest.Mock };
+  let orderRepository: {
+    findOne: jest.Mock;
+    find: jest.Mock;
+    findAndCount: jest.Mock;
+    save: jest.Mock;
+    remove: jest.Mock;
+  };
   let rabbitmqService: { publishToQueue: jest.Mock };
   let outboxService: { add: jest.Mock };
   let dataSource: { createQueryRunner: jest.Mock; transaction: jest.Mock };
@@ -183,7 +186,12 @@ describe('OrdersService', () => {
         expect.objectContaining({ messageId: expect.any(String) }),
       );
       expect(grpcService.authorize).toHaveBeenCalledWith(
-        expect.objectContaining({ orderId: 7, amount: '100.00', currency: 'UAH', idempotencyKey: 'key-1' }),
+        expect.objectContaining({
+          orderId: 7,
+          amount: '100.00',
+          currency: 'UAH',
+          idempotencyKey: 'key-1',
+        }),
         expect.anything(), // Metadata
         expect.objectContaining({ deadline: expect.any(Date) }),
       );
@@ -238,7 +246,9 @@ describe('OrdersService', () => {
       orderRepository.findOne.mockResolvedValueOnce(null);
 
       grpcService.authorize.mockReturnValueOnce(
-        throwError(() => Object.assign(new Error('deadline'), { code: GrpcStatus.DEADLINE_EXCEEDED })),
+        throwError(() =>
+          Object.assign(new Error('deadline'), { code: GrpcStatus.DEADLINE_EXCEEDED }),
+        ),
       );
 
       const savedOrder = makeOrder({ id: 10 });
@@ -338,7 +348,10 @@ describe('OrdersService', () => {
     it('marks order PROCESSED and adds outbox event', async () => {
       const order = makeOrder({ id: 1, status: OrderStatus.PENDING });
       const processedRepo = { insert: jest.fn().mockResolvedValue(undefined) };
-      const orderRepo = { findOne: jest.fn().mockResolvedValue(order), save: jest.fn().mockResolvedValue(order) };
+      const orderRepo = {
+        findOne: jest.fn().mockResolvedValue(order),
+        save: jest.fn().mockResolvedValue(order),
+      };
 
       const manager = {
         getRepository: jest.fn().mockImplementation((entity: unknown) => {
@@ -348,7 +361,9 @@ describe('OrdersService', () => {
         }),
       };
 
-      dataSource.transaction.mockImplementation((cb: (m: typeof manager) => Promise<void>) => cb(manager));
+      dataSource.transaction.mockImplementation((cb: (m: typeof manager) => Promise<void>) =>
+        cb(manager),
+      );
 
       await service.processFromQueue(baseMessage);
 
@@ -368,7 +383,9 @@ describe('OrdersService', () => {
       const manager = {
         getRepository: jest.fn().mockReturnValue(processedRepo),
       };
-      dataSource.transaction.mockImplementation((cb: (m: typeof manager) => Promise<void>) => cb(manager));
+      dataSource.transaction.mockImplementation((cb: (m: typeof manager) => Promise<void>) =>
+        cb(manager),
+      );
 
       await expect(service.processFromQueue(baseMessage)).resolves.toBeUndefined();
       expect(outboxService.add).not.toHaveBeenCalled();
@@ -376,10 +393,14 @@ describe('OrdersService', () => {
 
     it('throws when insert into processed_messages fails with non-23505 error', async () => {
       const processedRepo = {
-        insert: jest.fn().mockRejectedValue(Object.assign(new Error('db error'), { code: '42P01' })),
+        insert: jest
+          .fn()
+          .mockRejectedValue(Object.assign(new Error('db error'), { code: '42P01' })),
       };
       const manager = { getRepository: jest.fn().mockReturnValue(processedRepo) };
-      dataSource.transaction.mockImplementation((cb: (m: typeof manager) => Promise<void>) => cb(manager));
+      dataSource.transaction.mockImplementation((cb: (m: typeof manager) => Promise<void>) =>
+        cb(manager),
+      );
 
       await expect(service.processFromQueue(baseMessage)).rejects.toThrow('db error');
     });
@@ -394,7 +415,9 @@ describe('OrdersService', () => {
           return {};
         }),
       };
-      dataSource.transaction.mockImplementation((cb: (m: typeof manager) => Promise<void>) => cb(manager));
+      dataSource.transaction.mockImplementation((cb: (m: typeof manager) => Promise<void>) =>
+        cb(manager),
+      );
 
       await expect(service.processFromQueue(baseMessage)).rejects.toThrow(NotFoundException);
     });
@@ -402,7 +425,9 @@ describe('OrdersService', () => {
     it('throws Error when simulate=alwaysFail', async () => {
       const processedRepo = { insert: jest.fn().mockResolvedValue(undefined) };
       const manager = { getRepository: jest.fn().mockReturnValue(processedRepo) };
-      dataSource.transaction.mockImplementation((cb: (m: typeof manager) => Promise<void>) => cb(manager));
+      dataSource.transaction.mockImplementation((cb: (m: typeof manager) => Promise<void>) =>
+        cb(manager),
+      );
 
       await expect(
         service.processFromQueue({ ...baseMessage, simulate: 'alwaysFail' }),
@@ -417,9 +442,9 @@ describe('OrdersService', () => {
       const order = makeOrder({ status: OrderStatus.COMPLETE });
       orderRepository.findOne.mockResolvedValue(order);
 
-      await expect(
-        service.updateStatus(1, { status: OrderStatus.PENDING }),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.updateStatus(1, { status: OrderStatus.PENDING })).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('transitions PENDING → PROCESSING successfully', async () => {

@@ -45,7 +45,9 @@ export class OrdersWorkerService implements OnApplicationBootstrap {
 
     try {
       await this.ordersService.processFromQueue({ ...payload, attempt });
-      this.logger.log(`Orders worker success (messageId=${messageId}, orderId=${orderId}, attempt=${attempt})`);
+      this.logger.log(
+        `Orders worker success (messageId=${messageId}, orderId=${orderId}, attempt=${attempt})`,
+      );
       ch.ack(msg);
       return;
     } catch (err) {

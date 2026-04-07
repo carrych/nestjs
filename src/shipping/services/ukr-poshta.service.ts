@@ -95,9 +95,7 @@ export class UkrPoshtaService {
     };
   }
 
-  async trackShipment(
-    trackingNumber: string,
-  ): Promise<TrackingResult> {
+  async trackShipment(trackingNumber: string): Promise<TrackingResult> {
     try {
       const statusData = await this.request(
         `statuses/last?barcode=${trackingNumber}`,
@@ -128,12 +126,7 @@ export class UkrPoshtaService {
 
   // ────────────────── Private helpers ──────────────────
 
-  private async request(
-    path: string,
-    method: string,
-    body?: unknown,
-    baseUrl?: string,
-  ) {
+  private async request(path: string, method: string, body?: unknown, baseUrl?: string) {
     const url = `${baseUrl || this.baseUrl}${path}?token=${this.token}`;
 
     const options: RequestInit = {

@@ -44,7 +44,9 @@ export class RabbitmqService implements OnModuleInit, OnModuleDestroy {
       } catch (err) {
         if (attempt === maxAttempts) throw err;
         const delay = 1000 * Math.pow(2, attempt - 1);
-        this.logger.warn(`RabbitMQ not ready, retrying in ${delay}ms (attempt ${attempt}/${maxAttempts})`);
+        this.logger.warn(
+          `RabbitMQ not ready, retrying in ${delay}ms (attempt ${attempt}/${maxAttempts})`,
+        );
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
@@ -112,7 +114,9 @@ export class RabbitmqService implements OnModuleInit, OnModuleDestroy {
           );
           try {
             ch.nack(msg, false, true);
-          } catch {}
+          } catch {
+            /* nack failed — channel likely closed, nothing to do */
+          }
         }
       },
       { noAck: false, ...options },

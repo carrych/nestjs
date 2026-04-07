@@ -1,11 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  ParseIntPipe,
-  Patch,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Patch } from '@nestjs/common';
 
 import { StocksService } from './stocks.service';
 import { UpdateStockDto } from './dto/update-stock.dto';
@@ -25,10 +18,7 @@ export class StocksController {
   }
 
   @Patch('product/:productId')
-  update(
-    @Param('productId', ParseIntPipe) productId: number,
-    @Body() dto: UpdateStockDto,
-  ) {
+  update(@Param('productId', ParseIntPipe) productId: number, @Body() dto: UpdateStockDto) {
     return this.stocksService.updateByProductId(productId, dto);
   }
 }

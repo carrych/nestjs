@@ -76,7 +76,12 @@ export class AuditLogInterceptor implements NestInterceptor {
           action,
           entityType,
           entityId: extractEntityId(req.params as Record<string, string>),
-          details: sanitize({ method, path: routePath, body: req.body, query: req.query }) as Record<string, unknown>,
+          details: sanitize({
+            method,
+            path: routePath,
+            body: req.body as unknown,
+            query: req.query,
+          }) as Record<string, unknown>,
           ip: req.ip ?? null,
         });
       }),

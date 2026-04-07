@@ -60,12 +60,8 @@ export class CreateInvoices1700000009000 implements MigrationInterface {
       )
     `);
 
-    await queryRunner.query(
-      `CREATE INDEX "idx_invoices_order_id" ON "invoices"("order_id")`,
-    );
-    await queryRunner.query(
-      `CREATE INDEX "idx_invoices_user_id" ON "invoices"("user_id")`,
-    );
+    await queryRunner.query(`CREATE INDEX "idx_invoices_order_id" ON "invoices"("order_id")`);
+    await queryRunner.query(`CREATE INDEX "idx_invoices_user_id" ON "invoices"("user_id")`);
 
     // ── Invoice Items ──
     await queryRunner.query(`

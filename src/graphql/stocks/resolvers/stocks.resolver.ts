@@ -18,9 +18,7 @@ export class StocksResolver {
   }
 
   @Query(() => StockType, { name: 'stock' })
-  async getStock(
-    @Args('productId', { type: () => Int }) productId: number,
-  ): Promise<StockType> {
+  async getStock(@Args('productId', { type: () => Int }) productId: number): Promise<StockType> {
     return this.stocksService.findByProductId(productId);
   }
 

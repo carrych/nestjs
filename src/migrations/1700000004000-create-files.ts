@@ -30,9 +30,7 @@ export class CreateFiles1700000004000 implements MigrationInterface {
       )
     `);
 
-    await queryRunner.query(
-      `CREATE INDEX "idx_files_owner_id" ON "files"("owner_id")`,
-    );
+    await queryRunner.query(`CREATE INDEX "idx_files_owner_id" ON "files"("owner_id")`);
 
     await queryRunner.query(
       `CREATE INDEX "idx_files_status" ON "files"("status") WHERE "status" = 'pending'`,
@@ -43,9 +41,7 @@ export class CreateFiles1700000004000 implements MigrationInterface {
     );
 
     // Add image_file_id to products
-    await queryRunner.query(
-      `ALTER TABLE "products" ADD COLUMN "image_file_id" UUID`,
-    );
+    await queryRunner.query(`ALTER TABLE "products" ADD COLUMN "image_file_id" UUID`);
 
     await queryRunner.query(
       `CREATE INDEX "idx_products_image_file_id" ON "products"("image_file_id")`,
@@ -62,12 +58,8 @@ export class CreateFiles1700000004000 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "products" DROP CONSTRAINT IF EXISTS "fk_products_image_file"`,
     );
-    await queryRunner.query(
-      `DROP INDEX IF EXISTS "idx_products_image_file_id"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "products" DROP COLUMN IF EXISTS "image_file_id"`,
-    );
+    await queryRunner.query(`DROP INDEX IF EXISTS "idx_products_image_file_id"`);
+    await queryRunner.query(`ALTER TABLE "products" DROP COLUMN IF EXISTS "image_file_id"`);
 
     await queryRunner.query(`DROP INDEX IF EXISTS "idx_files_entity"`);
     await queryRunner.query(`DROP INDEX IF EXISTS "idx_files_status"`);

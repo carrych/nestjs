@@ -12,10 +12,7 @@ describe('OrderItemResolver', () => {
     productLoader = { load: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        OrderItemResolver,
-        { provide: ProductLoader, useValue: productLoader },
-      ],
+      providers: [OrderItemResolver, { provide: ProductLoader, useValue: productLoader }],
     }).compile();
 
     resolver = module.get<OrderItemResolver>(OrderItemResolver);
