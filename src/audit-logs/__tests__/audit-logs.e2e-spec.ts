@@ -16,6 +16,74 @@ import request from 'supertest';
 import { AppModule } from '../../app.module';
 import { getAuthToken, bearerHeader } from '../../common/test-helpers/auth.helper';
 
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Creates a product with a unique name/slug so tests don't collide.
+ * Returns the created product id.
+ */
+async function createUniqueProduct(app: INestApplication): Promise<number> {
+  const uid = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const res = await request(app.getHttpServer())
+    .post('/products')
+    .send({ name: `Audit Product ${uid}`, slug: `audit-${uid}`, price: 999 })
+    .expect(201);
+  return res.body.id as number;
+}
+
+/**
+ * Polls GET /audit-logs until a log with the given action + entityId appears.
+ *
+ * Use for PATCH / DELETE where the route has :id → entityId is stored in the log.
+ * Passes limit=100 to avoid the default-20 pagination cutting off results.
+ */
+async function waitForAuditLogByEntityId(
+  app: INestApplication,
+  adminToken: string,
+  filters: { action: string; entityId: string },
+  maxWaitMs = 500,
+): Promise<boolean> {
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    const res = await request(app.getHttpServer())
+      .get('/audit-logs')
+      .query({ action: filters.action, limit: 100 })
+      .set(bearerHeader(adminToken));
+    const logs = res.body.data as Array<{ action: string; entityId: string | null }>;
+    if (logs.some((l) => l.entityId === filters.entityId)) return true;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  return false;
+}
+
+/**
+ * Polls GET /audit-logs until the total count for the given action reaches minTotal.
+ *
+ * Use for POST (CREATE) where the route is a collection endpoint (no :id param) →
+ * the interceptor stores entityId = null, so we cannot match by entityId.
+ * Instead, take a count snapshot before the action, then poll until count increases.
+ */
+async function waitForAuditLogCountReached(
+  app: INestApplication,
+  adminToken: string,
+  action: string,
+  minTotal: number,
+  maxWaitMs = 500,
+): Promise<boolean> {
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    const res = await request(app.getHttpServer())
+      .get('/audit-logs')
+      .query({ action, limit: 1 }) // only need `total`, not data
+      .set(bearerHeader(adminToken));
+    if ((res.body.total as number) >= minTotal) return true;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  return false;
+}
+
+// ─── suite ───────────────────────────────────────────────────────────────────
+
 describe('AuditLogsController (e2e)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
@@ -25,12 +93,6 @@ describe('AuditLogsController (e2e)', () => {
   const ADMIN_EMAIL = `audit-admin-${Date.now()}@example.com`;
   const USER_EMAIL = `audit-user-${Date.now()}@example.com`;
   const PASSWORD = 'Password123!';
-
-  const PRODUCT_PAYLOAD = {
-    name: `Audit Test Product ${Date.now()}`,
-    slug: `audit-test-${Date.now()}`,
-    price: 999,
-  };
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -45,10 +107,8 @@ describe('AuditLogsController (e2e)', () => {
 
     dataSource = moduleFixture.get(DataSource);
 
-    // Register regular user
     userToken = await getAuthToken(app, USER_EMAIL, PASSWORD);
 
-    // Register + promote admin
     await getAuthToken(app, ADMIN_EMAIL, PASSWORD);
     await dataSource.query(`UPDATE users SET role = 'admin' WHERE email = $1`, [ADMIN_EMAIL]);
     adminToken = await getAuthToken(app, ADMIN_EMAIL, PASSWORD);
@@ -84,81 +144,64 @@ describe('AuditLogsController (e2e)', () => {
     });
   });
 
-  // ─── Log creation via mutations ───────────────────────────────────────────
+  // ─── Audit log creation ───────────────────────────────────────────────────
+  //
+  // Each test is fully independent:
+  //   - creates its own unique product via createUniqueProduct()
+  //   - uses the appropriate polling helper to wait for the log without setTimeout
+  //
+  // Why two helpers instead of one?
+  //   POST /products has no :id route param → AuditLogInterceptor stores entityId = null.
+  //   PATCH/DELETE /products/:id have :id → entityId = String(productId).
+  //   We cannot use entityId to identify a CREATE log, so we compare total counts instead.
 
-  describe('POST /products → audit log CREATE_PRODUCT', () => {
-    let productId: number;
-
-    it('creates a product successfully', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/products')
-        .send(PRODUCT_PAYLOAD)
-        .expect(201);
-
-      productId = res.body.id as number;
-      expect(productId).toBeDefined();
-    });
-
-    it('audit log with action CREATE_PRODUCT exists after POST', async () => {
-      // Give fire-and-forget a moment to persist
-      await new Promise((r) => setTimeout(r, 50));
-
-      const res = await request(app.getHttpServer())
+  describe('audit log creation via product mutations', () => {
+    it('logs CREATE_PRODUCT after POST /products', async () => {
+      // Snapshot count before — POST stores entityId=null so we can't match by id
+      const beforeRes = await request(app.getHttpServer())
         .get('/audit-logs')
-        .query({ action: 'CREATE_PRODUCT', entityType: 'product' })
-        .set(bearerHeader(adminToken))
-        .expect(200);
+        .query({ action: 'CREATE_PRODUCT', limit: 1 })
+        .set(bearerHeader(adminToken));
+      const countBefore = beforeRes.body.total as number;
 
-      const logs = res.body.data as Array<{ action: string; entityType: string }>;
-      const found = logs.find((l) => l.action === 'CREATE_PRODUCT' && l.entityType === 'product');
-      expect(found).toBeDefined();
+      await createUniqueProduct(app);
+
+      const found = await waitForAuditLogCountReached(
+        app,
+        adminToken,
+        'CREATE_PRODUCT',
+        countBefore + 1,
+      );
+      expect(found).toBe(true);
     });
 
-    it('audit log with action UPDATE_PRODUCT exists after PATCH', async () => {
+    it('logs UPDATE_PRODUCT after PATCH /products/:id', async () => {
+      const id = await createUniqueProduct(app);
+
       await request(app.getHttpServer())
-        .patch(`/products/${productId}`)
-        .send({ name: 'Updated Audit Product' })
+        .patch(`/products/${id}`)
+        .send({ name: `Updated ${Date.now()}` })
         .expect(200);
 
-      await new Promise((r) => setTimeout(r, 50));
-
-      const res = await request(app.getHttpServer())
-        .get('/audit-logs')
-        .query({ action: 'UPDATE_PRODUCT', entityType: 'product' })
-        .set(bearerHeader(adminToken))
-        .expect(200);
-
-      const logs = res.body.data as Array<{
-        action: string;
-        entityType: string;
-        entityId: string;
-      }>;
-      const found = logs.find(
-        (l) => l.action === 'UPDATE_PRODUCT' && l.entityId === String(productId),
-      );
-      expect(found).toBeDefined();
+      // PATCH /products/:id → entityId = String(id) in the log
+      const found = await waitForAuditLogByEntityId(app, adminToken, {
+        action: 'UPDATE_PRODUCT',
+        entityId: String(id),
+      });
+      expect(found).toBe(true);
     });
 
-    it('audit log with action DELETE_PRODUCT exists after DELETE', async () => {
-      await request(app.getHttpServer()).delete(`/products/${productId}`).expect(204);
+    it('logs DELETE_PRODUCT after DELETE /products/:id', async () => {
+      const id = await createUniqueProduct(app);
 
-      await new Promise((r) => setTimeout(r, 50));
+      await request(app.getHttpServer()).delete(`/products/${id}`).expect(204);
 
-      const res = await request(app.getHttpServer())
-        .get('/audit-logs')
-        .query({ action: 'DELETE_PRODUCT', entityType: 'product' })
-        .set(bearerHeader(adminToken))
-        .expect(200);
-
-      const logs = res.body.data as Array<{
-        action: string;
-        entityType: string;
-        entityId: string;
-      }>;
-      const found = logs.find(
-        (l) => l.action === 'DELETE_PRODUCT' && l.entityId === String(productId),
-      );
-      expect(found).toBeDefined();
+      // DELETE /products/:id → entityId = String(id) in the log
+      const found = await waitForAuditLogByEntityId(app, adminToken, {
+        action: 'DELETE_PRODUCT',
+        entityId: String(id),
+      });
+      expect(found).toBe(true);
     });
   });
 
@@ -189,7 +232,6 @@ describe('AuditLogsController (e2e)', () => {
         .set(bearerHeader(adminToken))
         .expect(200);
 
-      // Different records on different pages (if total > 1)
       if (page1.body.total > 1) {
         expect(page1.body.data[0].id).not.toBe(page2.body.data[0]?.id);
       }
@@ -222,14 +264,13 @@ describe('AuditLogsController (e2e)', () => {
     });
 
     it('POST /auth/login is NOT logged (@SkipAuditLog)', async () => {
-      // Login is @SkipAuditLog — should not appear in audit_logs
-      const before = await request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .get('/audit-logs')
         .query({ entityType: 'auth' })
         .set(bearerHeader(adminToken))
         .expect(200);
 
-      expect(before.body.total).toBe(0);
+      expect(res.body.total).toBe(0);
     });
   });
 });

@@ -19,6 +19,55 @@ import request from 'supertest';
 import { AppModule } from '../../app.module';
 import { getAuthToken, bearerHeader } from '../../common/test-helpers/auth.helper';
 
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+const PRESIGN_PAYLOAD = {
+  entityType: 'product-image',
+  entityId: '1',
+  contentType: 'image/png',
+  size: 100,
+};
+
+/**
+ * Presign only — returns fileId + uploadUrl without completing the upload.
+ * Use this when the test needs a pending (not yet completed) file record.
+ */
+async function createPendingFile(
+  app: INestApplication,
+  token: string,
+): Promise<{ fileId: string; uploadUrl: string }> {
+  const res = await request(app.getHttpServer())
+    .post('/files/presign')
+    .set(bearerHeader(token))
+    .send(PRESIGN_PAYLOAD)
+    .expect(201);
+  return { fileId: res.body.fileId as string, uploadUrl: res.body.uploadUrl as string };
+}
+
+/**
+ * Full presign → upload to S3 → complete cycle.
+ * Use this when the test needs a ready (completed) file record.
+ */
+async function createAndCompleteFile(app: INestApplication, token: string): Promise<string> {
+  const { fileId, uploadUrl } = await createPendingFile(app, token);
+
+  await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'image/png', 'Content-Length': '100' },
+    body: Buffer.alloc(100, 0xff),
+  });
+
+  await request(app.getHttpServer())
+    .post('/files/complete')
+    .set(bearerHeader(token))
+    .send({ fileId })
+    .expect(200);
+
+  return fileId;
+}
+
+// ─── suite ───────────────────────────────────────────────────────────────────
+
 describe('FilesController (e2e)', () => {
   let app: INestApplication;
   let userToken: string;
@@ -39,7 +88,6 @@ describe('FilesController (e2e)', () => {
     );
     await app.init();
 
-    // Get tokens for two separate users
     userToken = await getAuthToken(app, USER_EMAIL, PASSWORD);
     otherUserToken = await getAuthToken(app, OTHER_EMAIL, PASSWORD);
   });
@@ -49,25 +97,19 @@ describe('FilesController (e2e)', () => {
   });
 
   // ──────────────────────────────────────────────────────────────────────────
-  // POST /files/presign — auth checks
+  // POST /files/presign
   // ──────────────────────────────────────────────────────────────────────────
-  describe('POST /files/presign', () => {
-    const validBody = {
-      entityType: 'product-image',
-      entityId: '1',
-      contentType: 'image/png',
-      size: 1024,
-    };
 
+  describe('POST /files/presign', () => {
     it('401 without auth token', async () => {
-      await request(app.getHttpServer()).post('/files/presign').send(validBody).expect(401);
+      await request(app.getHttpServer()).post('/files/presign').send(PRESIGN_PAYLOAD).expect(401);
     });
 
     it('400 for disallowed contentType', async () => {
       await request(app.getHttpServer())
         .post('/files/presign')
         .set(bearerHeader(userToken))
-        .send({ ...validBody, contentType: 'application/pdf' })
+        .send({ ...PRESIGN_PAYLOAD, contentType: 'application/pdf' })
         .expect(400);
     });
 
@@ -75,7 +117,7 @@ describe('FilesController (e2e)', () => {
       await request(app.getHttpServer())
         .post('/files/presign')
         .set(bearerHeader(userToken))
-        .send({ ...validBody, size: 20 * 1024 * 1024 })
+        .send({ ...PRESIGN_PAYLOAD, size: 20 * 1024 * 1024 })
         .expect(400);
     });
 
@@ -83,7 +125,7 @@ describe('FilesController (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post('/files/presign')
         .set(bearerHeader(userToken))
-        .send(validBody)
+        .send(PRESIGN_PAYLOAD)
         .expect(201);
 
       expect(res.body).toMatchObject({
@@ -98,54 +140,49 @@ describe('FilesController (e2e)', () => {
   });
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Full flow: presign → PUT to S3 → complete → verify
+  // Full upload flow
+  //
+  // Happy path runs as a single test — all steps share local variables and
+  // there is no ordering dependency between it() blocks.
+  // Edge cases each create their own file via helpers and are fully independent.
   // ──────────────────────────────────────────────────────────────────────────
-  describe('Full upload flow', () => {
-    let fileId: string;
-    let uploadUrl: string;
 
-    it('presign creates pending record', async () => {
-      const res = await request(app.getHttpServer())
+  describe('Full upload flow', () => {
+    it('presign → upload to S3 → complete — happy path', async () => {
+      // Step 1: presign
+      const presignRes = await request(app.getHttpServer())
         .post('/files/presign')
         .set(bearerHeader(userToken))
-        .send({
-          entityType: 'product-image',
-          entityId: '1',
-          contentType: 'image/png',
-          size: 100,
-        })
+        .send(PRESIGN_PAYLOAD)
         .expect(201);
 
-      fileId = res.body.fileId as string;
-      uploadUrl = res.body.uploadUrl as string;
-
+      const { fileId, uploadUrl } = presignRes.body as { fileId: string; uploadUrl: string };
       expect(fileId).toBeDefined();
       expect(uploadUrl).toMatch(/^http/);
-    });
 
-    it('PUT file to S3 via presigned URL', async () => {
-      // Upload a small fake PNG to LocalStack
-      const fakeImage = Buffer.alloc(100, 0xff);
+      // Step 2: upload to LocalStack S3
       const putRes = await fetch(uploadUrl, {
         method: 'PUT',
         headers: { 'Content-Type': 'image/png', 'Content-Length': '100' },
-        body: fakeImage,
+        body: Buffer.alloc(100, 0xff),
       });
       expect(putRes.status).toBeLessThan(300);
-    });
 
-    it('POST /files/complete → 200, status ready', async () => {
-      const res = await request(app.getHttpServer())
+      // Step 3: complete → status becomes ready
+      const completeRes = await request(app.getHttpServer())
         .post('/files/complete')
         .set(bearerHeader(userToken))
         .send({ fileId })
         .expect(200);
 
-      expect(res.body.status).toBe('ready');
-      expect(res.body.viewUrl).toBeDefined();
+      expect(completeRes.body.status).toBe('ready');
+      expect(completeRes.body.viewUrl).toBeDefined();
     });
 
-    it('POST /files/complete again → 400 already completed', async () => {
+    it('complete fails with 400 when file is already completed', async () => {
+      // Own completed file — independent of the happy-path test above
+      const fileId = await createAndCompleteFile(app, userToken);
+
       await request(app.getHttpServer())
         .post('/files/complete')
         .set(bearerHeader(userToken))
@@ -153,18 +190,14 @@ describe('FilesController (e2e)', () => {
         .expect(400);
     });
 
-    it('other user cannot complete own user file → 403', async () => {
-      // Create a new pending file for userToken, then try to complete as otherUser
-      const presignRes = await request(app.getHttpServer())
-        .post('/files/presign')
-        .set(bearerHeader(userToken))
-        .send({ entityType: 'product-image', entityId: '1', contentType: 'image/jpeg', size: 50 })
-        .expect(201);
+    it('other user cannot complete another user file → 403', async () => {
+      // Own pending file belonging to userToken
+      const { fileId } = await createPendingFile(app, userToken);
 
       await request(app.getHttpServer())
         .post('/files/complete')
         .set(bearerHeader(otherUserToken))
-        .send({ fileId: presignRes.body.fileId })
+        .send({ fileId })
         .expect(403);
     });
   });
@@ -172,22 +205,17 @@ describe('FilesController (e2e)', () => {
   // ──────────────────────────────────────────────────────────────────────────
   // DELETE /files/:id
   // ──────────────────────────────────────────────────────────────────────────
+
   describe('DELETE /files/:id', () => {
     it('401 without token', async () => {
       await request(app.getHttpServer()).delete('/files/some-uuid').expect(401);
     });
 
     it('403 when another user tries to delete', async () => {
-      // Create file as userToken
-      const presignRes = await request(app.getHttpServer())
-        .post('/files/presign')
-        .set(bearerHeader(userToken))
-        .send({ entityType: 'product-image', entityId: '1', contentType: 'image/png', size: 50 })
-        .expect(201);
+      const { fileId } = await createPendingFile(app, userToken);
 
-      // Other user tries to delete it
       await request(app.getHttpServer())
-        .delete(`/files/${presignRes.body.fileId as string}`)
+        .delete(`/files/${fileId}`)
         .set(bearerHeader(otherUserToken))
         .expect(403);
     });

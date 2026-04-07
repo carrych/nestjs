@@ -99,6 +99,7 @@ export class OrdersService implements OnModuleInit {
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
+    let committed = false;
     try {
       const productIds = dto.items.map((item) => item.productId);
 
@@ -164,6 +165,7 @@ export class OrdersService implements OnModuleInit {
 
       // 8. Commit
       await queryRunner.commitTransaction();
+      committed = true;
       this.logger.log(`Order #${savedOrder.id} created (key: ${dto.idempotencyKey})`);
 
       // 9. Publish to queue (fire-and-forget — does not block the API response)
@@ -188,7 +190,9 @@ export class OrdersService implements OnModuleInit {
 
       return { order: savedOrder, created: true, payment };
     } catch (error) {
-      await queryRunner.rollbackTransaction();
+      if (!committed) {
+        await queryRunner.rollbackTransaction();
+      }
 
       // Handle race condition: another request inserted the same idempotencyKey
       if (

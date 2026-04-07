@@ -53,6 +53,7 @@
     "@nestjs/platform-express": "~11.0.1",
     "@nestjs/schedule": "~6.1.1",
     "@nestjs/typeorm": "~11.0.0",
+    "amqp-connection-manager": "~5.0.0",
     "amqplib": "~0.10.9",
     "bcrypt": "~6.0.0",
     "class-transformer": "~0.5.1",

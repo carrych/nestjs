@@ -4532,6 +4532,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"amqp-connection-manager@npm:~5.0.0":
+  version: 5.0.0
+  resolution: "amqp-connection-manager@npm:5.0.0"
+  dependencies:
+    promise-breaker: "npm:^6.0.0"
+  peerDependencies:
+    amqplib: "*"
+  checksum: 10c0/5dfbbe07c5f58dad96bbeb4a8cbf8d6736672d5e2d82630dee0fecd9d1e437fea8a07f893ed71b88ef1777f833d63d26dc4daf4ac4604367bcc6167fac971f77
+  languageName: node
+  linkType: hard
+
 "amqplib@npm:~0.10.9":
   version: 0.10.9
   resolution: "amqplib@npm:0.10.9"
@@ -8317,6 +8328,7 @@ __metadata:
     "@types/passport-jwt": "npm:~4.0.1"
     "@types/pg": "npm:~8"
     "@types/supertest": "npm:~6.0.2"
+    amqp-connection-manager: "npm:~5.0.0"
     amqplib: "npm:~0.10.9"
     aws-sdk-client-mock: "npm:~4.1.0"
     bcrypt: "npm:~6.0.0"
@@ -8938,6 +8950,13 @@ __metadata:
   version: 2.0.1
   resolution: "process-nextick-args@npm:2.0.1"
   checksum: 10c0/bec089239487833d46b59d80327a1605e1c5287eaad770a291add7f45fda1bb5e28b38e0e061add0a1d0ee0984788ce74fa394d345eed1c420cacf392c554367
+  languageName: node
+  linkType: hard
+
+"promise-breaker@npm:^6.0.0":
+  version: 6.0.0
+  resolution: "promise-breaker@npm:6.0.0"
+  checksum: 10c0/fcd00836dd96d34d3376964bc3a9482251248cef00f0dcf1f2485e7d9af44f9c48b0431cf4dc780fd5a7137b8e0861e3c6557667811522e93978f6bffab66cfe
   languageName: node
   linkType: hard
 

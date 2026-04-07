@@ -17,8 +17,16 @@
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { of } from 'rxjs';
 import request from 'supertest';
 import { AppModule } from '../../app.module';
+import { PAYMENTS_GRPC_CLIENT } from '../../orders/orders.constants';
+
+const mockPaymentsGrpcClient = {
+  getService: () => ({
+    authorize: () => of({ paymentId: 'mock-payment-id', status: 'PENDING' }),
+  }),
+};
 
 describe('PaymentsController (e2e)', () => {
   let app: INestApplication;
@@ -26,7 +34,10 @@ describe('PaymentsController (e2e)', () => {
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(PAYMENTS_GRPC_CLIENT)
+      .useValue(mockPaymentsGrpcClient)
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
@@ -42,7 +53,7 @@ describe('PaymentsController (e2e)', () => {
     const res = await request(app.getHttpServer())
       .post('/orders')
       .send({
-        userId: 500,
+        userId: 1,
         items: [{ productId: 5, amount: 1, price: 4299 }],
       });
     return Number(res.body.id);
@@ -129,7 +140,7 @@ describe('PaymentsController (e2e)', () => {
 
       const dto = {
         orderId,
-        userId: 500,
+        userId: 1,
         amount: 4299,
         method: 'bank_transfer',
         status: 'pending',
@@ -154,7 +165,7 @@ describe('PaymentsController (e2e)', () => {
         .post('/payments')
         .send({
           orderId: 99999,
-          userId: 500,
+          userId: 1,
           amount: 1000,
           method: 'cash',
         });
@@ -166,7 +177,7 @@ describe('PaymentsController (e2e)', () => {
     it('should return 400 when required fields are missing', async () => {
       const res = await request(app.getHttpServer())
         .post('/payments')
-        .send({ userId: 500 });
+        .send({ userId: 1 });
 
       expect(res.status).toBe(400);
     });
@@ -183,7 +194,7 @@ describe('PaymentsController (e2e)', () => {
         .post('/payments')
         .send({
           orderId,
-          userId: 500,
+          userId: 1,
           amount: 5000,
           method: 'cash',
           status: 'pending',
@@ -204,7 +215,7 @@ describe('PaymentsController (e2e)', () => {
         .post('/payments')
         .send({
           orderId,
-          userId: 500,
+          userId: 1,
           amount: 1000,
           method: 'cash',
         });
@@ -238,7 +249,7 @@ describe('PaymentsController (e2e)', () => {
         .post('/payments')
         .send({
           orderId,
-          userId: 500,
+          userId: 1,
           amount: 100,
           method: 'cash',
         });

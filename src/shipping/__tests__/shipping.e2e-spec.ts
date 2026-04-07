@@ -19,8 +19,19 @@
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { of } from 'rxjs';
 import request from 'supertest';
 import { AppModule } from '../../app.module';
+import { PAYMENTS_GRPC_CLIENT } from '../../orders/orders.constants';
+import { INVOICE_SERVICE } from '../../invoices-client/invoices-client.module';
+
+const mockPaymentsGrpcClient = {
+  getService: () => ({
+    authorize: () => of({ paymentId: 'mock-payment-id', status: 'PENDING' }),
+  }),
+};
+
+const mockInvoiceClient = { send: () => of(null), emit: () => of(null) };
 
 describe('ShippingController (e2e)', () => {
   let app: INestApplication;
@@ -28,7 +39,12 @@ describe('ShippingController (e2e)', () => {
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(PAYMENTS_GRPC_CLIENT)
+      .useValue(mockPaymentsGrpcClient)
+      .overrideProvider(INVOICE_SERVICE)
+      .useValue(mockInvoiceClient)
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
@@ -44,7 +60,7 @@ describe('ShippingController (e2e)', () => {
     const res = await request(app.getHttpServer())
       .post('/orders')
       .send({
-        userId: 600,
+        userId: 1,
         items: [{ productId: 5, amount: 1, price: 4299 }],
       });
     return Number(res.body.id);
@@ -120,7 +136,7 @@ describe('ShippingController (e2e)', () => {
 
       const dto = {
         orderId,
-        userId: 600,
+        userId: 1,
         trackingNumber: 'NP-E2E-TEST-001',
         declaredValue: 4299,
         shippingCost: 150,
@@ -147,7 +163,7 @@ describe('ShippingController (e2e)', () => {
         .post('/shipping')
         .send({
           orderId: 99999,
-          userId: 600,
+          userId: 1,
           declaredValue: 1000,
         });
 
@@ -158,7 +174,7 @@ describe('ShippingController (e2e)', () => {
     it('should return 400 when required fields are missing', async () => {
       const res = await request(app.getHttpServer())
         .post('/shipping')
-        .send({ userId: 600 });
+        .send({ userId: 1 });
 
       expect(res.status).toBe(400);
     });
@@ -174,7 +190,7 @@ describe('ShippingController (e2e)', () => {
         .post('/shipping')
         .send({
           orderId,
-          userId: 600,
+          userId: 1,
           declaredValue: 1000,
           status: 'pending',
         });
@@ -194,7 +210,7 @@ describe('ShippingController (e2e)', () => {
         .post('/shipping')
         .send({
           orderId,
-          userId: 600,
+          userId: 1,
           declaredValue: 2000,
           status: 'pending',
         });
@@ -234,7 +250,7 @@ describe('ShippingController (e2e)', () => {
         .post('/shipping')
         .send({
           orderId,
-          userId: 600,
+          userId: 1,
           declaredValue: 500,
         });
       const shippingId = createRes.body.id;
