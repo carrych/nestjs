@@ -1,5 +1,9 @@
 import { ObjectType, Field, Int, Float } from '@nestjs/graphql';
-import { PaymentStatus, PaymentMethod, PaymentType as PaymentTypeEnum } from '../enums/payment-enums';
+import {
+  PaymentStatus,
+  PaymentMethod,
+  PaymentType as PaymentTypeEnum,
+} from '../enums/payment-enums';
 
 @ObjectType()
 export class PaymentType {

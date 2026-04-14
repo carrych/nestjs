@@ -167,9 +167,7 @@ describe('AuditLogInterceptor', () => {
     const ctx = makeContext({ method: 'POST', routePath: '/products', user: null });
     await lastValueFrom(interceptor.intercept(ctx, makeHandler()));
 
-    expect(logSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: null, role: null }),
-    );
+    expect(logSpy).toHaveBeenCalledWith(expect.objectContaining({ userId: null, role: null }));
   });
 
   // ─── Sanitization ─────────────────────────────────────────────────────────

@@ -16,7 +16,7 @@ describe('AuthController (e2e)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
 
-  const EMAIL    = `auth-e2e-${Date.now()}@example.com`;
+  const EMAIL = `auth-e2e-${Date.now()}@example.com`;
   const PASSWORD = 'Password123!';
 
   const ADMIN_EMAIL = `auth-admin-${Date.now()}@example.com`;
@@ -89,10 +89,7 @@ describe('AuthController (e2e)', () => {
   describe('POST /auth/logout', () => {
     it('204 with valid token', async () => {
       const token = await getAuthToken(app, EMAIL, PASSWORD);
-      await request(app.getHttpServer())
-        .post('/auth/logout')
-        .set(bearerHeader(token))
-        .expect(204);
+      await request(app.getHttpServer()).post('/auth/logout').set(bearerHeader(token)).expect(204);
     });
 
     it('401 without token', async () => {
@@ -104,20 +101,14 @@ describe('AuthController (e2e)', () => {
 
       await request(app.getHttpServer()).get('/users').set(bearerHeader(token)).expect(200);
 
-      await request(app.getHttpServer())
-        .post('/auth/logout')
-        .set(bearerHeader(token))
-        .expect(204);
+      await request(app.getHttpServer()).post('/auth/logout').set(bearerHeader(token)).expect(204);
 
       await request(app.getHttpServer()).get('/users').set(bearerHeader(token)).expect(401);
     });
 
     it('can log in again with a fresh token after logout', async () => {
       const token = await getAuthToken(app, EMAIL, PASSWORD);
-      await request(app.getHttpServer())
-        .post('/auth/logout')
-        .set(bearerHeader(token))
-        .expect(204);
+      await request(app.getHttpServer()).post('/auth/logout').set(bearerHeader(token)).expect(204);
 
       const newToken = await getAuthToken(app, EMAIL, PASSWORD);
       expect(typeof newToken).toBe('string');
@@ -182,9 +173,7 @@ describe('AuthController (e2e)', () => {
 
   describe('POST /users/:id/revoke-sessions', () => {
     it('401 without token', async () => {
-      await request(app.getHttpServer())
-        .post(`/users/${userId}/revoke-sessions`)
-        .expect(401);
+      await request(app.getHttpServer()).post(`/users/${userId}/revoke-sessions`).expect(401);
     });
 
     it('403 for regular user', async () => {

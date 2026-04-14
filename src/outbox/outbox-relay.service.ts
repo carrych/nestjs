@@ -66,7 +66,7 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
           m.status = OutboxStatus.SENT;
           m.nextAttemptAt = null;
           await repo.save(m);
-        } catch (err) {
+        } catch {
           m.status = OutboxStatus.FAILED;
           m.attempts = (m.attempts ?? 0) + 1;
           m.nextAttemptAt = this.nextAttemptAt(m.attempts);

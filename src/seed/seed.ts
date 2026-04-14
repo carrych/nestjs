@@ -150,15 +150,69 @@ async function seed() {
 
     // ── Order Items ──
     const orderItemsSeed: Partial<OrderItem>[] = [
-      { orderId: orders[0].id, productId: products[0].id, amount: 1, price: '49999.00', discount: '0.00' },
-      { orderId: orders[0].id, productId: products[3].id, amount: 2, price: '12999.00', discount: '500.00' },
-      { orderId: orders[1].id, productId: products[2].id, amount: 1, price: '52999.00', discount: '0.00' },
-      { orderId: orders[2].id, productId: products[1].id, amount: 1, price: '47999.00', discount: '2000.00' },
-      { orderId: orders[2].id, productId: products[4].id, amount: 3, price: '4299.00', discount: '0.00' },
-      { orderId: orders[3].id, productId: products[0].id, amount: 2, price: '49999.00', discount: '1000.00' },
-      { orderId: orders[3].id, productId: products[3].id, amount: 1, price: '12999.00', discount: '0.00' },
-      { orderId: orders[3].id, productId: products[4].id, amount: 1, price: '4299.00', discount: '0.00' },
-      { orderId: orders[4].id, productId: products[1].id, amount: 1, price: '47999.00', discount: '0.00' },
+      {
+        orderId: orders[0].id,
+        productId: products[0].id,
+        amount: 1,
+        price: '49999.00',
+        discount: '0.00',
+      },
+      {
+        orderId: orders[0].id,
+        productId: products[3].id,
+        amount: 2,
+        price: '12999.00',
+        discount: '500.00',
+      },
+      {
+        orderId: orders[1].id,
+        productId: products[2].id,
+        amount: 1,
+        price: '52999.00',
+        discount: '0.00',
+      },
+      {
+        orderId: orders[2].id,
+        productId: products[1].id,
+        amount: 1,
+        price: '47999.00',
+        discount: '2000.00',
+      },
+      {
+        orderId: orders[2].id,
+        productId: products[4].id,
+        amount: 3,
+        price: '4299.00',
+        discount: '0.00',
+      },
+      {
+        orderId: orders[3].id,
+        productId: products[0].id,
+        amount: 2,
+        price: '49999.00',
+        discount: '1000.00',
+      },
+      {
+        orderId: orders[3].id,
+        productId: products[3].id,
+        amount: 1,
+        price: '12999.00',
+        discount: '0.00',
+      },
+      {
+        orderId: orders[3].id,
+        productId: products[4].id,
+        amount: 1,
+        price: '4299.00',
+        discount: '0.00',
+      },
+      {
+        orderId: orders[4].id,
+        productId: products[1].id,
+        amount: 1,
+        price: '47999.00',
+        discount: '0.00',
+      },
     ];
 
     const items = orderItemRepo.create(orderItemsSeed);

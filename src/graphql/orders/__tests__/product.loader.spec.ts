@@ -11,10 +11,7 @@ describe('ProductLoader', () => {
     productsService = { findByIds: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        ProductLoader,
-        { provide: ProductsService, useValue: productsService },
-      ],
+      providers: [ProductLoader, { provide: ProductsService, useValue: productsService }],
     }).compile();
 
     loader = await module.resolve<ProductLoader>(ProductLoader);
@@ -32,11 +29,7 @@ describe('ProductLoader', () => {
     productsService.findByIds.mockResolvedValue(products);
 
     // Request all three in parallel — DataLoader batches them
-    const [p1, p2, p3] = await Promise.all([
-      loader.load(1),
-      loader.load(2),
-      loader.load(3),
-    ]);
+    const [p1, p2, p3] = await Promise.all([loader.load(1), loader.load(2), loader.load(3)]);
 
     expect(productsService.findByIds).toHaveBeenCalledTimes(1);
     expect(productsService.findByIds).toHaveBeenCalledWith([1, 2, 3]);

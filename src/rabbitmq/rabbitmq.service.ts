@@ -5,6 +5,17 @@ import * as amqp from 'amqplib';
 
 export type RabbitConsumeHandler = (msg: ConsumeMessage, channel: Channel) => Promise<void>;
 
+export interface StatusChangeEvent {
+  entity: 'payment' | 'shipping' | 'invoice';
+  entityId: number | string;
+  orderId: number;
+  status: string;
+  updatedAt: string;
+  // Only present for invoice events
+  documentUrl?: string;
+  qrCodeDataUrl?: string;
+}
+
 @Injectable()
 export class RabbitmqService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RabbitmqService.name);
@@ -33,7 +44,9 @@ export class RabbitmqService implements OnModuleInit, OnModuleDestroy {
       } catch (err) {
         if (attempt === maxAttempts) throw err;
         const delay = 1000 * Math.pow(2, attempt - 1);
-        this.logger.warn(`RabbitMQ not ready, retrying in ${delay}ms (attempt ${attempt}/${maxAttempts})`);
+        this.logger.warn(
+          `RabbitMQ not ready, retrying in ${delay}ms (attempt ${attempt}/${maxAttempts})`,
+        );
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
@@ -61,6 +74,15 @@ export class RabbitmqService implements OnModuleInit, OnModuleDestroy {
     const ch = this.getChannel();
     await ch.assertQueue('orders.process', { durable: true });
     await ch.assertQueue('orders.dlq', { durable: true });
+    await ch.assertQueue('status.changes', { durable: true });
+  }
+
+  publishStatusChange(event: StatusChangeEvent): void {
+    try {
+      this.publishToQueue('status.changes', event);
+    } catch (err) {
+      this.logger.error('Failed to publish status.changes event', (err as Error)?.stack);
+    }
   }
 
   publishToQueue(queue: string, payload: unknown, options?: Options.Publish): boolean {
@@ -92,7 +114,9 @@ export class RabbitmqService implements OnModuleInit, OnModuleDestroy {
           );
           try {
             ch.nack(msg, false, true);
-          } catch {}
+          } catch {
+            /* nack failed — channel likely closed, nothing to do */
+          }
         }
       },
       { noAck: false, ...options },

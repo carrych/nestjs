@@ -37,10 +37,7 @@ export class ShippingController {
   }
 
   @Patch(':id')
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateShippingDto,
-  ) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateShippingDto) {
     return this.shippingService.update(id, dto);
   }
 

@@ -32,9 +32,9 @@ export class PaymentsGrpcController {
   constructor(private readonly service: PaymentsGrpcService) {}
 
   @GrpcMethod('Payments', 'Authorize')
-  authorize(req: AuthorizeRequest): AuthorizeResponse {
+  async authorize(req: AuthorizeRequest): Promise<AuthorizeResponse> {
     this.logger.log(`Authorize (orderId=${req.orderId}, amount=${req.amount} ${req.currency})`);
-    const record = this.service.authorize(
+    const record = await this.service.authorize(
       req.orderId,
       req.amount,
       req.currency,
@@ -44,8 +44,8 @@ export class PaymentsGrpcController {
   }
 
   @GrpcMethod('Payments', 'GetPaymentStatus')
-  getPaymentStatus(req: GetPaymentStatusRequest): GetPaymentStatusResponse {
-    const record = this.service.getStatus(req.paymentId);
+  async getPaymentStatus(req: GetPaymentStatusRequest): Promise<GetPaymentStatusResponse> {
+    const record = await this.service.getStatus(req.paymentId);
     if (!record) {
       throw new RpcException({
         code: GrpcStatus.NOT_FOUND,
@@ -56,16 +56,25 @@ export class PaymentsGrpcController {
   }
 
   @GrpcMethod('Payments', 'Capture')
-  capture(req: { paymentId: string }): { paymentId: string; status: string } {
-    // Stub — not implemented
-    this.logger.log(`Capture stub (paymentId=${req.paymentId})`);
-    return { paymentId: req.paymentId, status: 'CAPTURED' };
+  async capture(req: { paymentId: string }): Promise<{ paymentId: string; status: string }> {
+    this.logger.log(`Capture (paymentId=${req.paymentId})`);
+    const record = await this.service.capture(req.paymentId);
+    if (!record) {
+      throw new RpcException({
+        code: GrpcStatus.NOT_FOUND,
+        message: `Payment ${req.paymentId} not found`,
+      });
+    }
+    return { paymentId: record.paymentId, status: record.status };
   }
 
   @GrpcMethod('Payments', 'Refund')
-  refund(req: { paymentId: string; amount: string }): { paymentId: string; status: string } {
-    // Stub — not implemented
-    this.logger.log(`Refund stub (paymentId=${req.paymentId})`);
-    return { paymentId: req.paymentId, status: 'REFUNDED' };
+  async refund(req: {
+    paymentId: string;
+    amount: string;
+  }): Promise<{ paymentId: string; status: string }> {
+    this.logger.log(`Refund (paymentId=${req.paymentId}, amount=${req.amount})`);
+    const record = await this.service.refund(req.paymentId, req.amount);
+    return { paymentId: record.paymentId, status: record.status };
   }
 }

@@ -13,3 +13,6 @@ schema.gql
 # Environment
 .env*
 !.env.example
+
+# GitHub Actions runner
+actions-runner/
