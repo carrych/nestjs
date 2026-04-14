@@ -10,6 +10,8 @@ import { AuthService } from '../auth.service';
 import { TokenBlacklist } from '../entities/token-blacklist.entity';
 import { UserService } from '../../user/user.service';
 import { UserRole } from '../../user/enums/user-role.enum';
+import { AuditLogsService } from '../../audit-logs/audit-logs.service';
+import { AuditOutcome } from '../../audit-logs/entities/audit-log.entity';
 
 const MOCK_USER = {
   id: 1,
@@ -32,6 +34,7 @@ describe('AuthService', () => {
     save: jest.Mock;
     delete: jest.Mock;
   };
+  let mockAuditLogsService: { log: jest.Mock; logEvent: jest.Mock };
 
   beforeEach(async () => {
     userService = { findByEmail: jest.fn() };
@@ -42,6 +45,7 @@ describe('AuthService', () => {
       save: jest.fn(),
       delete: jest.fn(),
     };
+    mockAuditLogsService = { log: jest.fn(), logEvent: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -49,6 +53,7 @@ describe('AuthService', () => {
         { provide: UserService, useValue: userService },
         { provide: JwtService, useValue: jwtService },
         { provide: getRepositoryToken(TokenBlacklist), useValue: blacklistRepo },
+        { provide: AuditLogsService, useValue: mockAuditLogsService },
       ],
     }).compile();
 
@@ -91,6 +96,36 @@ describe('AuthService', () => {
       userService.findByEmail.mockResolvedValue(MOCK_USER as never);
       await expect(service.login('user@example.com', 'wrong')).rejects.toThrow(
         UnauthorizedException,
+      );
+    });
+
+    // ─── Audit logging on failure ────────────────────────────────────────────
+
+    it('logs auth.login_failed with outcome FAILURE when user is not found', async () => {
+      userService.findByEmail.mockResolvedValue(null);
+
+      await expect(service.login('x@x.com', 'pw')).rejects.toThrow(UnauthorizedException);
+
+      expect(mockAuditLogsService.logEvent).toHaveBeenCalledWith(
+        'auth.login_failed',
+        expect.objectContaining({ outcome: AuditOutcome.FAILURE }),
+      );
+    });
+
+    it('logs auth.login_failed with outcome FAILURE and entityId when password is wrong', async () => {
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+      userService.findByEmail.mockResolvedValue(MOCK_USER as never);
+
+      await expect(service.login('user@example.com', 'wrong')).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      expect(mockAuditLogsService.logEvent).toHaveBeenCalledWith(
+        'auth.login_failed',
+        expect.objectContaining({
+          outcome: AuditOutcome.FAILURE,
+          entityId: String(MOCK_USER.id),
+        }),
       );
     });
   });

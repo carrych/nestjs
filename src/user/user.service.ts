@@ -7,12 +7,14 @@ import { User } from './entities/user.entity';
 import { UserRole } from './enums/user-role.enum';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 @Injectable()
 export class UserService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   async findAll(page: number, limit: number): Promise<User[]> {
@@ -43,7 +45,6 @@ export class UserService {
       role: UserRole.USER,
     });
     const saved = await this.userRepository.save(user);
-    // Reload via findOne so select:false on passwordHash is respected
     return this.findOne(saved.id);
   }
 
@@ -64,18 +65,48 @@ export class UserService {
     await this.userRepository.remove(user);
   }
 
-  async setRole(id: number, role: UserRole): Promise<User> {
+  async setRole(
+    id: number,
+    role: UserRole,
+    context?: { actorId?: number; actorRole?: string; correlationId?: string; ip?: string },
+  ): Promise<User> {
     const user = await this.findOne(id);
+    const previousRole = user.role;
     user.role = role;
-    return this.userRepository.save(user);
+    const saved = await this.userRepository.save(user);
+
+    this.auditLogsService.logEvent('user.role_changed', {
+      userId: context?.actorId ?? null,
+      role: context?.actorRole ?? null,
+      entityType: 'user',
+      entityId: String(id),
+      correlationId: context?.correlationId ?? null,
+      ip: context?.ip ?? null,
+      details: { targetUserId: id, previousRole, newRole: role },
+    });
+
+    return saved;
   }
 
   /**
    * Increment tokenVersion — invalidates ALL active tokens for this user.
    * The user must log in again to get a new token with the updated version.
    */
-  async revokeAllSessions(id: number): Promise<void> {
+  async revokeAllSessions(
+    id: number,
+    context?: { actorId?: number; actorRole?: string; correlationId?: string; ip?: string },
+  ): Promise<void> {
     const result = await this.userRepository.increment({ id }, 'tokenVersion', 1);
     if (!result.affected) throw new NotFoundException(`User #${id} not found`);
+
+    this.auditLogsService.logEvent('user.sessions_revoked', {
+      userId: context?.actorId ?? null,
+      role: context?.actorRole ?? null,
+      entityType: 'user',
+      entityId: String(id),
+      correlationId: context?.correlationId ?? null,
+      ip: context?.ip ?? null,
+      details: { targetUserId: id, reason: 'admin_revoke' },
+    });
   }
 }
