@@ -39,7 +39,13 @@ export class Shipping {
   @Column('numeric', { precision: 12, scale: 2, name: 'declared_value', default: 0.0 })
   declaredValue: string;
 
-  @Column('numeric', { precision: 12, scale: 2, name: 'shipping_cost', nullable: true, default: 0.0 })
+  @Column('numeric', {
+    precision: 12,
+    scale: 2,
+    name: 'shipping_cost',
+    nullable: true,
+    default: 0.0,
+  })
   shippingCost: string | null;
 
   @Column('numeric', { precision: 10, scale: 3, nullable: true })

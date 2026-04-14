@@ -32,9 +32,7 @@ describe('ProductsController (e2e)', () => {
 
   describe('GET /products', () => {
     it('should return an array of seeded products', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/products')
-        .query({ limit: 100 });
+      const res = await request(app.getHttpServer()).get('/products').query({ limit: 100 });
 
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
@@ -49,9 +47,7 @@ describe('ProductsController (e2e)', () => {
     });
 
     it('should support search query parameter', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/products')
-        .query({ search: 'MacBook' });
+      const res = await request(app.getHttpServer()).get('/products').query({ search: 'MacBook' });
 
       expect(res.status).toBe(200);
       expect(res.body.length).toBeGreaterThanOrEqual(1);
@@ -94,9 +90,7 @@ describe('ProductsController (e2e)', () => {
         published: true,
       };
 
-      const res = await request(app.getHttpServer())
-        .post('/products')
-        .send(dto);
+      const res = await request(app.getHttpServer()).post('/products').send(dto);
 
       expect(res.status).toBe(201);
       expect(res.body).toHaveProperty('id');
@@ -107,9 +101,7 @@ describe('ProductsController (e2e)', () => {
     });
 
     it('should return 400 when required fields are missing', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/products')
-        .send({ brand: 'NoBrand' });
+      const res = await request(app.getHttpServer()).post('/products').send({ brand: 'NoBrand' });
 
       expect(res.status).toBe(400);
     });
@@ -137,9 +129,7 @@ describe('ProductsController (e2e)', () => {
     });
 
     it('should return 404 when updating non-existent product', async () => {
-      const res = await request(app.getHttpServer())
-        .patch('/products/999')
-        .send({ name: 'Ghost' });
+      const res = await request(app.getHttpServer()).patch('/products/999').send({ name: 'Ghost' });
 
       expect(res.status).toBe(404);
     });

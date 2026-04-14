@@ -32,4 +32,34 @@ export default tseslint.config(
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
+  // Test files and helpers: supertest res.body / mocks are typed as `any`
+  {
+    files: ['**/*.spec.ts', '**/*.e2e-spec.ts', '**/test-helpers/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/require-await': 'off',
+    },
+  },
+  // Files with untyped external data: API responses, raw SQL queries, AMQP messages
+  {
+    files: [
+      '**/shipping/services/*.ts',
+      '**/rabbitmq/**/*.ts',
+      '**/outbox/**/*.ts',
+      '**/files/files.service.ts',
+      '**/products/products.service.ts',
+    ],
+    rules: {
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-misused-promises': 'off',
+    },
+  },
 );

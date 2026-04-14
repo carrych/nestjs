@@ -37,10 +37,7 @@ describe('UserService — admin methods', () => {
     jest.clearAllMocks();
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        UserService,
-        { provide: getRepositoryToken(User), useValue: mockRepo },
-      ],
+      providers: [UserService, { provide: getRepositoryToken(User), useValue: mockRepo }],
     }).compile();
 
     service = module.get(UserService);
@@ -57,7 +54,9 @@ describe('UserService — admin methods', () => {
 
       expect(mockRepo.createQueryBuilder).toHaveBeenCalledWith('user');
       expect(mockQueryBuilder.addSelect).toHaveBeenCalledWith('user.passwordHash');
-      expect(mockQueryBuilder.where).toHaveBeenCalledWith('user.email = :email', { email: 'user@example.com' });
+      expect(mockQueryBuilder.where).toHaveBeenCalledWith('user.email = :email', {
+        email: 'user@example.com',
+      });
       expect(result).toEqual(user);
     });
 

@@ -42,7 +42,9 @@ export class UserService {
       passwordHash,
       role: UserRole.USER,
     });
-    return this.userRepository.save(user);
+    const saved = await this.userRepository.save(user);
+    // Reload via findOne so select:false on passwordHash is respected
+    return this.findOne(saved.id);
   }
 
   async update(id: number, dto: UpdateUserDto): Promise<User> {

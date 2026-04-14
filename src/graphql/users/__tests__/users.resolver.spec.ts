@@ -10,10 +10,7 @@ describe('UsersResolver', () => {
     userService = { findAll: jest.fn(), findOne: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        UsersResolver,
-        { provide: UserService, useValue: userService },
-      ],
+      providers: [UsersResolver, { provide: UserService, useValue: userService }],
     }).compile();
 
     resolver = module.get<UsersResolver>(UsersResolver);
@@ -34,7 +31,7 @@ describe('UsersResolver', () => {
   it('should cap limit at 50', () => {
     userService.findAll.mockReturnValue([]);
 
-    resolver.getUsers(1, 100);
+    void resolver.getUsers(1, 100);
 
     expect(userService.findAll).toHaveBeenCalledWith(1, 50);
   });

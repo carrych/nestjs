@@ -7,6 +7,7 @@ import { Order } from '../orders/entities/order.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { QueryPaymentDto } from './dto/query-payment.dto';
+import { RabbitmqService } from '../rabbitmq/rabbitmq.service';
 
 @Injectable()
 export class PaymentsService {
@@ -15,6 +16,7 @@ export class PaymentsService {
     private readonly paymentRepository: Repository<Payment>,
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
+    private readonly rabbitmqService: RabbitmqService,
   ) {}
 
   async create(dto: CreatePaymentDto): Promise<Payment> {
@@ -87,6 +89,7 @@ export class PaymentsService {
 
   async update(id: number, dto: UpdatePaymentDto): Promise<Payment> {
     const payment = await this.findOne(id);
+    const prevStatus = payment.status;
 
     if (dto.amount !== undefined) {
       payment.amount = String(dto.amount);
@@ -98,7 +101,19 @@ export class PaymentsService {
       payment.transactionNumber = dto.transactionNumber;
     }
 
-    return this.paymentRepository.save(payment);
+    const updated = await this.paymentRepository.save(payment);
+
+    if (dto.status !== undefined && dto.status !== prevStatus) {
+      this.rabbitmqService.publishStatusChange({
+        entity: 'payment',
+        entityId: updated.id,
+        orderId: Number(updated.orderId),
+        status: updated.status,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    return updated;
   }
 
   async remove(id: number): Promise<void> {

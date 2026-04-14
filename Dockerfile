@@ -105,6 +105,18 @@ CMD ["node", "dist/src/main.js"]
 
 
 # ═══════════════════════════════════════════════════════════════════
+# Stage: payments-grpc — same prod image, runs the gRPC microservice
+# Shares all compiled code with prod; only CMD differs.
+# Deploy as a separate container to scale payment processing independently.
+# ═══════════════════════════════════════════════════════════════════
+FROM prod AS payments-grpc
+
+EXPOSE 50051
+
+CMD ["node", "dist/src/payments-grpc/main.js"]
+
+
+# ═══════════════════════════════════════════════════════════════════
 # Stage: prod-distroless — minimal distroless runtime
 # Base: gcr.io/distroless/nodejs22-debian12:nonroot
 #   - No shell (sh, bash, ash)

@@ -19,8 +19,8 @@ const MOCK_USER = {
   tokenVersion: 1,
 };
 
-const futureDate = new Date(Date.now() + 3_600_000);  // +1 h
-const pastDate   = new Date(Date.now() - 1_000);       // -1 s
+const futureDate = new Date(Date.now() + 3_600_000); // +1 h
+const pastDate = new Date(Date.now() - 1_000); // -1 s
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -34,21 +34,21 @@ describe('AuthService', () => {
   };
 
   beforeEach(async () => {
-    userService    = { findByEmail: jest.fn() };
-    jwtService     = { sign: jest.fn().mockReturnValue('signed.token') };
-    blacklistRepo  = {
+    userService = { findByEmail: jest.fn() };
+    jwtService = { sign: jest.fn().mockReturnValue('signed.token') };
+    blacklistRepo = {
       findOne: jest.fn(),
-      create:  jest.fn((v) => v),
-      save:    jest.fn(),
-      delete:  jest.fn(),
+      create: jest.fn((v) => v),
+      save: jest.fn(),
+      delete: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
-        { provide: UserService,                          useValue: userService },
-        { provide: JwtService,                           useValue: jwtService },
-        { provide: getRepositoryToken(TokenBlacklist),   useValue: blacklistRepo },
+        { provide: UserService, useValue: userService },
+        { provide: JwtService, useValue: jwtService },
+        { provide: getRepositoryToken(TokenBlacklist), useValue: blacklistRepo },
       ],
     }).compile();
 
@@ -89,7 +89,9 @@ describe('AuthService', () => {
     it('throws 401 on wrong password', async () => {
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
       userService.findByEmail.mockResolvedValue(MOCK_USER as never);
-      await expect(service.login('user@example.com', 'wrong')).rejects.toThrow(UnauthorizedException);
+      await expect(service.login('user@example.com', 'wrong')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 

@@ -86,7 +86,8 @@ export class NovaPoshtaService {
       );
     }
 
-    const payer = (input.payer || 'recipient').charAt(0).toUpperCase() + (input.payer || 'recipient').slice(1);
+    const payer =
+      (input.payer || 'recipient').charAt(0).toUpperCase() + (input.payer || 'recipient').slice(1);
 
     const documentDTO = {
       PayerType: payer,
@@ -121,10 +122,7 @@ export class NovaPoshtaService {
   /**
    * Track shipment status by tracking number + recipient phone.
    */
-  async trackShipment(
-    trackingNumber: string,
-    phone: string,
-  ): Promise<TrackingResult> {
+  async trackShipment(trackingNumber: string, phone: string): Promise<TrackingResult> {
     const [status] = await this.callApi('TrackingDocument', 'getStatusDocuments', {
       Documents: [{ DocumentNumber: trackingNumber, Phone: phone }],
     });

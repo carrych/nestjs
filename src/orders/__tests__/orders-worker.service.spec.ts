@@ -69,10 +69,7 @@ describe('OrdersWorkerService', () => {
     it('subscribes to orders.process queue when WORKERS_ENABLED=true', async () => {
       await service.onApplicationBootstrap();
 
-      expect(rabbitmqService.consume).toHaveBeenCalledWith(
-        'orders.process',
-        expect.any(Function),
-      );
+      expect(rabbitmqService.consume).toHaveBeenCalledWith('orders.process', expect.any(Function));
     });
 
     it('skips subscribe when WORKERS_ENABLED=false', async () => {

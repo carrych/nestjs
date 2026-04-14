@@ -88,9 +88,7 @@ describe('StocksController (e2e)', () => {
       expect(Number(res.body.productId)).toBe(5);
 
       // Restore original value
-      await request(app.getHttpServer())
-        .patch('/stocks/product/5')
-        .send({ stock: originalStock });
+      await request(app.getHttpServer()).patch('/stocks/product/5').send({ stock: originalStock });
     });
 
     it('should update only the reserved field when stock is omitted', async () => {

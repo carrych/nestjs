@@ -30,4 +30,4 @@ async function bootstrap() {
   Logger.log(`🚀App listening on port ${await app.getUrl()}🚀`);
 }
 
-bootstrap();
+void bootstrap();

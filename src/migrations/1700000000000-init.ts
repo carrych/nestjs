@@ -26,12 +26,8 @@ export class Init1700000000000 implements MigrationInterface {
       )
     `);
 
-    await queryRunner.query(
-      `CREATE INDEX "idx_products_slug" ON "products"("slug")`,
-    );
-    await queryRunner.query(
-      `CREATE INDEX "idx_products_brand" ON "products"("brand")`,
-    );
+    await queryRunner.query(`CREATE INDEX "idx_products_slug" ON "products"("slug")`);
+    await queryRunner.query(`CREATE INDEX "idx_products_brand" ON "products"("brand")`);
 
     // ── Order status enum ──
     await queryRunner.query(`
@@ -55,9 +51,7 @@ export class Init1700000000000 implements MigrationInterface {
       )
     `);
 
-    await queryRunner.query(
-      `CREATE INDEX "idx_orders_user_id" ON "orders"("user_id")`,
-    );
+    await queryRunner.query(`CREATE INDEX "idx_orders_user_id" ON "orders"("user_id")`);
 
     // ── Order Items ──
     await queryRunner.query(`
@@ -71,9 +65,7 @@ export class Init1700000000000 implements MigrationInterface {
       )
     `);
 
-    await queryRunner.query(
-      `CREATE INDEX "idx_order_items_order_id" ON "order_items"("order_id")`,
-    );
+    await queryRunner.query(`CREATE INDEX "idx_order_items_order_id" ON "order_items"("order_id")`);
 
     // ── Payment enums ──
     await queryRunner.query(`
@@ -115,9 +107,7 @@ export class Init1700000000000 implements MigrationInterface {
       )
     `);
 
-    await queryRunner.query(
-      `CREATE INDEX "idx_payments_order_id" ON "payments"("order_id")`,
-    );
+    await queryRunner.query(`CREATE INDEX "idx_payments_order_id" ON "payments"("order_id")`);
 
     // ── Shipping status enum ──
     await queryRunner.query(`
@@ -148,9 +138,7 @@ export class Init1700000000000 implements MigrationInterface {
       )
     `);
 
-    await queryRunner.query(
-      `CREATE INDEX "idx_shipping_order_id" ON "shipping"("order_id")`,
-    );
+    await queryRunner.query(`CREATE INDEX "idx_shipping_order_id" ON "shipping"("order_id")`);
 
     // ── Stocks ──
     await queryRunner.query(`

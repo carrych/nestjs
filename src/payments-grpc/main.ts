@@ -22,4 +22,4 @@ async function bootstrap() {
   Logger.log(`Payments gRPC server listening on :${port}`, 'PaymentsGrpc');
 }
 
-bootstrap();
+void bootstrap();
