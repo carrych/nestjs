@@ -4,6 +4,7 @@ import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 
+import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { UserModule } from '../user/user.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -13,6 +14,7 @@ import { TokenBlacklistCleanupTask } from './tasks/token-blacklist-cleanup.task'
 
 @Module({
   imports: [
+    AuditLogsModule,
     UserModule,
     PassportModule,
     TypeOrmModule.forFeature([TokenBlacklist]),
