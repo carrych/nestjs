@@ -52,6 +52,7 @@ services:
   # ── PostgreSQL ──────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
+    command: postgres -c shared_preload_libraries=pg_stat_statements
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
@@ -80,8 +81,11 @@ services:
       # Override DB_HOST: in Docker, postgres is the service name, not "localhost"
       DB_HOST: postgres
       PAYMENTS_GRPC_URL: "payments-grpc:50051"
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672"
+      THROTTLE_GLOBAL_LIMIT: "100000"
+      THROTTLE_STRICT_LIMIT: "100000"
     ports:
-      - "8080:3000"     # host:container — only api is reachable from host
+      - "8082:3000"     # host:container — 8080/8081 used by prod/stage CD deployments
     networks:
       - backend          # reaches postgres
       - public           # reaches internet (Nova Poshta, UkrPoshta, S3)
