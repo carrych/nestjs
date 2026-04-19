@@ -283,29 +283,55 @@ export class OrdersService implements OnModuleInit {
   }
 
   async findAll(query: QueryOrderDto): Promise<Order[]> {
-    const where = this.buildWhere(query);
-    const { limit = 10, offset = 0 } = query;
+    const { limit = 10, offset = 0, status, userId, dateFrom, dateTo } = query;
 
-    return this.orderRepository.find({
-      where,
-      relations: { items: true },
-      skip: offset,
-      take: limit,
-      order: { createdAt: 'DESC' },
-    });
+    const qb = this.orderRepository
+      .createQueryBuilder('order')
+      .select([
+        'order.id',
+        'order.orderNumber',
+        'order.status',
+        'order.userId',
+        'order.addressId',
+        'order.idempotencyKey',
+        'order.createdAt',
+      ])
+      .orderBy('order.createdAt', 'DESC')
+      .skip(offset)
+      .take(limit);
+
+    if (status) qb.andWhere('order.status = :status', { status });
+    if (userId) qb.andWhere('order.userId = :userId', { userId });
+    if (dateFrom) qb.andWhere('order.createdAt >= :dateFrom', { dateFrom: new Date(dateFrom) });
+    if (dateTo) qb.andWhere('order.createdAt <= :dateTo', { dateTo: new Date(dateTo) });
+
+    return qb.getMany();
   }
 
   async findAllWithCount(query: QueryOrderDto): Promise<[Order[], number]> {
-    const where = this.buildWhere(query);
-    const { limit = 10, offset = 0 } = query;
+    const { limit = 10, offset = 0, status, userId, dateFrom, dateTo } = query;
 
-    return this.orderRepository.findAndCount({
-      where,
-      relations: { items: true },
-      skip: offset,
-      take: limit,
-      order: { createdAt: 'DESC' },
-    });
+    const qb = this.orderRepository
+      .createQueryBuilder('order')
+      .select([
+        'order.id',
+        'order.orderNumber',
+        'order.status',
+        'order.userId',
+        'order.addressId',
+        'order.idempotencyKey',
+        'order.createdAt',
+      ])
+      .orderBy('order.createdAt', 'DESC')
+      .skip(offset)
+      .take(limit);
+
+    if (status) qb.andWhere('order.status = :status', { status });
+    if (userId) qb.andWhere('order.userId = :userId', { userId });
+    if (dateFrom) qb.andWhere('order.createdAt >= :dateFrom', { dateFrom: new Date(dateFrom) });
+    if (dateTo) qb.andWhere('order.createdAt <= :dateTo', { dateTo: new Date(dateTo) });
+
+    return qb.getManyAndCount();
   }
 
   private buildWhere(query: QueryOrderDto): Record<string, unknown> {
