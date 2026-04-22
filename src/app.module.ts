@@ -30,12 +30,14 @@ import { GraphqlStocksModule } from './graphql/stocks/graphql-stocks.module';
 import { GraphqlUsersModule } from './graphql/users/graphql-users.module';
 import { HealthModule } from './health/health.module';
 import { RabbitmqModule } from './rabbitmq/rabbitmq.module';
+import { InvoiceGeneratorModule } from './invoice-generator/invoice-generator.module';
 
 @Module({
   imports: [
     HealthModule,
     ConfigModule,
     RabbitmqModule,
+    InvoiceGeneratorModule,
     ScheduleModule.forRoot(),
 
     // ── Rate Limiting ────────────────────────────────────────────────
