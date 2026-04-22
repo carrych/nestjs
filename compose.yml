@@ -186,14 +186,16 @@ services:
     restart: unless-stopped
 
   # ── WS Service ───────────────────────────────────────────────────
+  # Same codebase as api, separate Dockerfile stage — scale independently:
+  #   docker compose up --scale ws-service=3
   ws-service:
     build:
-      context: ../ws-service
-      target: prod
+      context: .
+      target: ws-service
     env_file: .env
     environment:
       NODE_ENV: production
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672"
       PORT: "3002"
     ports:
       - "3002:3002"     # Socket.IO port exposed to clients
@@ -204,6 +206,8 @@ services:
       rabbitmq:
         condition: service_healthy
     restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
 
   # ── Seed (one-off job) ───────────────────────────────────────────
   # Run manually: docker compose run --rm seed
