@@ -5,6 +5,7 @@ import { Shipping } from './entities/shipping.entity';
 import { Order } from '../orders/entities/order.entity';
 import { ShippingService } from './shipping.service';
 import { ShippingController } from './shipping.controller';
+import { DeliveryServiceFactory } from './services/delivery-service.factory';
 import { NovaPoshtaService } from './services/nova-poshta.service';
 import { UkrPoshtaService } from './services/ukr-poshta.service';
 import { InvoicesClientModule } from '../invoices-client/invoices-client.module';
@@ -12,7 +13,7 @@ import { InvoicesClientModule } from '../invoices-client/invoices-client.module'
 @Module({
   imports: [TypeOrmModule.forFeature([Shipping, Order]), InvoicesClientModule],
   controllers: [ShippingController],
-  providers: [ShippingService, NovaPoshtaService, UkrPoshtaService],
-  exports: [ShippingService, NovaPoshtaService, UkrPoshtaService],
+  providers: [ShippingService, NovaPoshtaService, UkrPoshtaService, DeliveryServiceFactory],
+  exports: [ShippingService, NovaPoshtaService, UkrPoshtaService, DeliveryServiceFactory],
 })
 export class ShippingModule {}

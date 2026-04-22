@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ShippingStatus } from '../enums/shipping-status.enum';
 import {
   CreateShipmentInput,
+  IDeliveryService,
   ShipmentResult,
   TrackingResult,
 } from '../interfaces/delivery-service.interface';
@@ -46,7 +47,7 @@ const PARCEL_ERROR_CODES = [
 const NO_PARCEL_PARAMS_CODE = '20000200226';
 
 @Injectable()
-export class NovaPoshtaService {
+export class NovaPoshtaService implements IDeliveryService {
   private readonly logger = new Logger(NovaPoshtaService.name);
   private readonly apiUrl = 'https://api.novaposhta.ua/v2.0/json/';
 
@@ -122,7 +123,7 @@ export class NovaPoshtaService {
   /**
    * Track shipment status by tracking number + recipient phone.
    */
-  async trackShipment(trackingNumber: string, phone: string): Promise<TrackingResult> {
+  async trackShipment(trackingNumber: string, phone = ''): Promise<TrackingResult> {
     const [status] = await this.callApi('TrackingDocument', 'getStatusDocuments', {
       Documents: [{ DocumentNumber: trackingNumber, Phone: phone }],
     });
