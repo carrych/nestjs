@@ -39,10 +39,7 @@ describe('RabbitmqService', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        RabbitmqService,
-        { provide: ConfigService, useValue: configService },
-      ],
+      providers: [RabbitmqService, { provide: ConfigService, useValue: configService }],
     }).compile();
 
     service = module.get(RabbitmqService);

@@ -3,13 +3,18 @@ name: Setup Node.js + Yarn 4
 runs:
   using: composite
   steps:
+    # Must run before setup-node — setup-node's `cache: yarn` internally calls
+    # `yarn` to locate the cache directory. Without corepack shims in place,
+    # the global Yarn 1.x runs instead and fails on `packageManager: "yarn@4.6.0"`.
+    - run: corepack enable
+      shell: bash
+
     - uses: actions/setup-node@v4
       with:
         node-version: '22'
         cache: 'yarn'
 
     - run: |
-        corepack enable
         corepack prepare yarn@4.6.0 --activate
         yarn install --immutable
       shell: bash

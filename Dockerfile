@@ -91,6 +91,7 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 COPY --chown=appuser:appgroup --from=build /app/dist ./dist
 COPY --chown=appuser:appgroup --from=prod-deps /app/node_modules ./node_modules
 COPY --chown=appuser:appgroup package.json ./
+COPY --chown=appuser:appgroup proto/ ./proto/
 
 USER appuser
 
@@ -101,6 +102,30 @@ EXPOSE 3000
 
 # Explicit signal handling via node (not yarn/npm wrapper)
 CMD ["node", "dist/src/main.js"]
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Stage: payments-grpc — same prod image, runs the gRPC microservice
+# Shares all compiled code with prod; only CMD differs.
+# Deploy as a separate container to scale payment processing independently.
+# ═══════════════════════════════════════════════════════════════════
+FROM prod AS payments-grpc
+
+EXPOSE 50051
+
+CMD ["node", "dist/src/payments-grpc/main.js"]
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Stage: ws-service — same prod image, runs the WebSocket gateway
+# Shares all compiled code with prod; only CMD and EXPOSE differ.
+# Deploy as a separate container to scale WS connections independently.
+# ═══════════════════════════════════════════════════════════════════
+FROM prod AS ws-service
+
+EXPOSE 3002
+
+CMD ["node", "dist/src/events/main.js"]
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -117,6 +142,7 @@ WORKDIR /app
 COPY --from=build /app/dist ./dist
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY package.json ./
+COPY proto/ ./proto/
 
 # /tmp is writable in distroless; NestJS GraphQL writes schema here
 ENV GRAPHQL_SCHEMA_PATH=/tmp/schema.gql

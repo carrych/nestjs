@@ -4,6 +4,7 @@ import { Request } from 'express';
 import { Observable, tap } from 'rxjs';
 
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
+import { AuditOutcome } from '../../audit-logs/entities/audit-log.entity';
 import { User } from '../../user/entities/user.entity';
 import { SKIP_AUDIT_LOG_KEY } from '../decorators/skip-audit-log.decorator';
 
@@ -16,7 +17,8 @@ const METHOD_PREFIX: Record<string, string> = {
   DELETE: 'DELETE',
 };
 
-const SENSITIVE_KEYS_RE = /password|secret|token|authorization|hash/i;
+/** Keys whose values must never appear in audit log details */
+const SENSITIVE_KEYS_RE = /password|secret|token|authorization|hash|credential/i;
 
 function sanitize(obj: unknown): unknown {
   if (obj === null || obj === undefined || typeof obj !== 'object') return obj;
@@ -30,16 +32,16 @@ function sanitize(obj: unknown): unknown {
 }
 
 function extractEntityType(routePath: string): string {
-  // '/products/:id' → 'product' | '/files/presign' → 'file' | '/audit-logs' → 'audit_log'
   const first = routePath.split('/').find((s) => s && !s.startsWith(':'));
   if (!first) return 'unknown';
-  // kebab-case → snake_case, remove trailing 's'
   return first.replace(/-/g, '_').replace(/s$/, '');
 }
 
 function extractEntityId(params: Record<string, string>): string | null {
-  return params?.id ?? params?.productId ?? params?.orderId ?? null;
+  return params?.id ?? params?.productId ?? params?.orderId ?? params?.paymentId ?? null;
 }
+
+type RequestWithExtras = Request & { requestId?: string };
 
 @Injectable()
 export class AuditLogInterceptor implements NestInterceptor {
@@ -49,37 +51,54 @@ export class AuditLogInterceptor implements NestInterceptor {
   ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    const skip = this.reflector.getAllAndOverride<boolean>(SKIP_AUDIT_LOG_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (skip || context.getType() !== 'http') {
+      return next.handle();
+    }
+
+    const req = context.switchToHttp().getRequest<RequestWithExtras>();
+    const method = req.method;
+
+    if (!MUTATION_METHODS.has(method)) {
+      return next.handle();
+    }
+
     return next.handle().pipe(
-      tap(() => {
-        const skip = this.reflector.getAllAndOverride<boolean>(SKIP_AUDIT_LOG_KEY, [
-          context.getHandler(),
-          context.getClass(),
-        ]);
-        if (skip) return;
-
-        if (context.getType() !== 'http') return;
-
-        const req = context.switchToHttp().getRequest<Request>();
-        const method = req.method;
-
-        if (!MUTATION_METHODS.has(method)) return;
-
-        const routePath: string = (req.route as { path?: string })?.path ?? req.path;
-        const user = req.user as User | undefined;
-        const prefix = METHOD_PREFIX[method];
-        const entityType = extractEntityType(routePath);
-        const action = `${prefix}_${entityType.toUpperCase()}`;
-
-        this.auditLogsService.log({
-          userId: user?.id ?? null,
-          role: user?.role ?? null,
-          action,
-          entityType,
-          entityId: extractEntityId(req.params as Record<string, string>),
-          details: sanitize({ method, path: routePath, body: req.body, query: req.query }) as Record<string, unknown>,
-          ip: req.ip ?? null,
-        });
+      tap({
+        next: () => this.record(context, req, AuditOutcome.SUCCESS),
+        error: () => this.record(context, req, AuditOutcome.FAILURE),
       }),
     );
+  }
+
+  private record(context: ExecutionContext, req: RequestWithExtras, outcome: AuditOutcome): void {
+    const method = req.method;
+    const routePath: string = (req.route as { path?: string })?.path ?? req.path;
+    const user = req.user as User | undefined;
+    const prefix = METHOD_PREFIX[method] ?? method;
+    const entityType = extractEntityType(routePath);
+    const action = `${prefix}_${entityType.toUpperCase()}`;
+
+    this.auditLogsService.log({
+      userId: user?.id ?? null,
+      role: user?.role ?? null,
+      action,
+      outcome,
+      correlationId: req.requestId ?? null,
+      entityType,
+      entityId: extractEntityId(req.params as Record<string, string>),
+      details: sanitize({
+        method,
+        path: routePath,
+        body: req.body as unknown,
+        query: req.query,
+      }) as Record<string, unknown>,
+      ip: req.ip ?? null,
+      userAgent: req.headers['user-agent']?.slice(0, 500) ?? null,
+    });
   }
 }

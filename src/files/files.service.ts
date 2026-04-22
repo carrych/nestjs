@@ -41,10 +41,9 @@ export class FilesService {
     }
 
     if (dto.entityType === 'product-image') {
-      const [product] = await this.dataSource.query(
-        `SELECT id FROM "products" WHERE "id" = $1`,
-        [Number(dto.entityId)],
-      );
+      const [product] = await this.dataSource.query(`SELECT id FROM "products" WHERE "id" = $1`, [
+        Number(dto.entityId),
+      ]);
       if (!product) throw new NotFoundException(`Product #${dto.entityId} not found`);
     }
 
@@ -76,7 +75,10 @@ export class FilesService {
     };
   }
 
-  async complete(fileId: string, userId: number): Promise<{ fileId: string; status: string; viewUrl: string }> {
+  async complete(
+    fileId: string,
+    userId: number,
+  ): Promise<{ fileId: string; status: string; viewUrl: string }> {
     const file = await this.findOwnedOrFail(fileId, userId);
 
     if (file.status === FileStatus.READY) {

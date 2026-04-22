@@ -7,6 +7,9 @@ import { OutboxMessage, OutboxStatus } from './outbox-message.entity';
 export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(OutboxRelayService.name);
   private timer: NodeJS.Timeout | null = null;
+  private readonly MIN_INTERVAL_MS = 1_000;
+  private readonly MAX_INTERVAL_MS = 10_000;
+  private currentIntervalMs = this.MIN_INTERVAL_MS;
 
   constructor(
     private readonly dataSource: DataSource,
@@ -20,24 +23,41 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
       return;
     }
 
-    this.timer = setInterval(() => {
-      this.tick().catch((err) => {
-        this.logger.error('Outbox relay tick failed', (err as Error)?.stack ?? String(err));
-      });
-    }, 1000);
-
-    this.logger.log('Outbox relay started (intervalMs=1000)');
+    this.scheduleNext();
+    this.logger.log(
+      `Outbox relay started (minMs=${this.MIN_INTERVAL_MS}, maxMs=${this.MAX_INTERVAL_MS})`,
+    );
   }
 
   onModuleDestroy(): void {
     if (this.timer) {
-      clearInterval(this.timer);
+      clearTimeout(this.timer);
       this.timer = null;
     }
   }
 
-  async tick(): Promise<void> {
+  private scheduleNext(): void {
+    this.timer = setTimeout(() => {
+      this.tick()
+        .then((processed) => {
+          this.currentIntervalMs =
+            processed > 0
+              ? this.MIN_INTERVAL_MS
+              : Math.min(this.currentIntervalMs * 2, this.MAX_INTERVAL_MS);
+        })
+        .catch((err) => {
+          this.logger.error('Outbox relay tick failed', (err as Error)?.stack ?? String(err));
+          this.currentIntervalMs = this.MIN_INTERVAL_MS;
+        })
+        .finally(() => {
+          this.scheduleNext();
+        });
+    }, this.currentIntervalMs);
+  }
+
+  async tick(): Promise<number> {
     const now = new Date();
+    let processed = 0;
 
     await this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(OutboxMessage);
@@ -54,6 +74,8 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
         .limit(50)
         .getMany();
 
+      processed = messages.length;
+
       for (const m of messages) {
         try {
           this.rabbitmqService.publishToQueue('domain.events', {
@@ -66,7 +88,7 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
           m.status = OutboxStatus.SENT;
           m.nextAttemptAt = null;
           await repo.save(m);
-        } catch (err) {
+        } catch {
           m.status = OutboxStatus.FAILED;
           m.attempts = (m.attempts ?? 0) + 1;
           m.nextAttemptAt = this.nextAttemptAt(m.attempts);
@@ -76,6 +98,8 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
         }
       }
     });
+
+    return processed;
   }
 
   private nextAttemptAt(attempts: number): Date {

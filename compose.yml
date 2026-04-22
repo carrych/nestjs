@@ -52,6 +52,7 @@ services:
   # ── PostgreSQL ──────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
+    command: postgres -c shared_preload_libraries=pg_stat_statements
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
@@ -79,8 +80,12 @@ services:
       GRAPHQL_SCHEMA_PATH: /tmp/schema.gql
       # Override DB_HOST: in Docker, postgres is the service name, not "localhost"
       DB_HOST: postgres
+      PAYMENTS_GRPC_URL: "payments-grpc:50051"
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672"
+      THROTTLE_GLOBAL_LIMIT: "100000"
+      THROTTLE_STRICT_LIMIT: "100000"
     ports:
-      - "8080:3000"     # host:container — only api is reachable from host
+      - "8082:3000"     # host:container — 8080/8081 used by prod/stage CD deployments
     networks:
       - backend          # reaches postgres
       - public           # reaches internet (Nova Poshta, UkrPoshta, S3)
@@ -89,6 +94,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      payments-grpc:
+        condition: service_started
     # distroless has no shell/curl/wget — use node's built-in http module.
     # /nodejs/bin/node is the absolute path to node in the distroless image.
     healthcheck:
@@ -130,6 +137,77 @@ services:
     restart: "no"
     profiles:
       - tools
+
+  # ── Payments gRPC ────────────────────────────────────────────────
+  # Separate scalable container for payment processing (Authorize/Capture/Refund).
+  # Scale independently: docker compose up --scale payments-grpc=3
+  payments-grpc:
+    build:
+      context: .
+      target: payments-grpc
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      PAYMENTS_GRPC_PORT: "50051"
+      PAYMENTS_GRPC_URL: "payments-grpc:50051"
+    networks:
+      - backend           # internal only — gRPC is service-to-service, not public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Invoice Service ──────────────────────────────────────────────
+  invoice-service:
+    build:
+      context: ../invoice-service
+      target: prod
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      PORT: "3001"
+      PUBLIC_INVOICE_URL: http://invoice-service:3001
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-eu-central-1}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
+    ports:
+      - "3001:3001"     # exposed for PDF/QR access from host
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── WS Service ───────────────────────────────────────────────────
+  # Same codebase as api, separate Dockerfile stage — scale independently:
+  #   docker compose up --scale ws-service=3
+  ws-service:
+    build:
+      context: .
+      target: ws-service
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672"
+      PORT: "3002"
+    ports:
+      - "3002:3002"     # Socket.IO port exposed to clients
+    networks:
+      - backend
+      - public           # clients connect from outside
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
 
   # ── Seed (one-off job) ───────────────────────────────────────────
   # Run manually: docker compose run --rm seed

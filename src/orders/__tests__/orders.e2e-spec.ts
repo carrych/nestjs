@@ -30,8 +30,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import { of } from 'rxjs';
 import request from 'supertest';
 import { AppModule } from '../../app.module';
+import { PAYMENTS_GRPC_CLIENT } from '../orders.constants';
+
+/** Stub gRPC client — returns a synthetic authorize response without a real gRPC server */
+const mockPaymentsGrpcClient = {
+  getService: () => ({
+    authorize: () => of({ paymentId: 'mock-payment-id', status: 'PENDING' }),
+  }),
+};
 
 describe('OrdersController (e2e)', () => {
   let app: INestApplication;
@@ -39,7 +48,10 @@ describe('OrdersController (e2e)', () => {
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(PAYMENTS_GRPC_CLIENT)
+      .useValue(mockPaymentsGrpcClient)
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
@@ -70,9 +82,7 @@ describe('OrdersController (e2e)', () => {
     });
 
     it('should filter orders by status=pending', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/orders')
-        .query({ status: 'pending' });
+      const res = await request(app.getHttpServer()).get('/orders').query({ status: 'pending' });
 
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
@@ -83,9 +93,7 @@ describe('OrdersController (e2e)', () => {
     });
 
     it('should filter orders by userId', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/orders')
-        .query({ userId: 1 });
+      const res = await request(app.getHttpServer()).get('/orders').query({ userId: 1 });
 
       expect(res.status).toBe(200);
       for (const order of res.body) {
@@ -94,9 +102,7 @@ describe('OrdersController (e2e)', () => {
     });
 
     it('should respect limit and offset', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/orders')
-        .query({ limit: 2, offset: 0 });
+      const res = await request(app.getHttpServer()).get('/orders').query({ limit: 2, offset: 0 });
 
       expect(res.status).toBe(200);
       expect(res.body.length).toBeLessThanOrEqual(2);
@@ -140,20 +146,16 @@ describe('OrdersController (e2e)', () => {
 
       const idempotencyKey = randomUUID();
       const dto = {
-        userId: 100,
+        userId: 1,
         idempotencyKey,
-        items: [
-          { productId: 4, amount: 1, price: 12999 },
-        ],
+        items: [{ productId: 4, amount: 1, price: 12999 }],
       };
 
-      const res = await request(app.getHttpServer())
-        .post('/orders')
-        .send(dto);
+      const res = await request(app.getHttpServer()).post('/orders').send(dto);
 
       expect(res.status).toBe(201);
       expect(res.body).toHaveProperty('id');
-      expect(res.body.userId).toBe(100);
+      expect(res.body.userId).toBe(1);
       expect(res.body.status).toBe('pending');
       expect(res.body.items).toHaveLength(1);
       expect(Number(res.body.items[0].productId)).toBe(4);
@@ -167,39 +169,31 @@ describe('OrdersController (e2e)', () => {
     it('should return the same order (200) when using duplicate idempotencyKey', async () => {
       const idempotencyKey = randomUUID();
       const dto = {
-        userId: 101,
+        userId: 1,
         idempotencyKey,
-        items: [
-          { productId: 5, amount: 1, price: 4299 },
-        ],
+        items: [{ productId: 5, amount: 1, price: 4299 }],
       };
 
       // First request -> 201
-      const first = await request(app.getHttpServer())
-        .post('/orders')
-        .send(dto);
+      const first = await request(app.getHttpServer()).post('/orders').send(dto);
       expect(first.status).toBe(201);
 
       // Second request with same key -> 200 (idempotent)
-      const second = await request(app.getHttpServer())
-        .post('/orders')
-        .send(dto);
+      const second = await request(app.getHttpServer()).post('/orders').send(dto);
       expect(second.status).toBe(200);
       expect(second.body.id).toBe(first.body.id);
     });
 
     it('should return 409 when stock is insufficient', async () => {
       const dto = {
-        userId: 102,
+        userId: 1,
         items: [
           // Request way more than available stock for product 1 (stock=20)
           { productId: 1, amount: 99999, price: 49999 },
         ],
       };
 
-      const res = await request(app.getHttpServer())
-        .post('/orders')
-        .send(dto);
+      const res = await request(app.getHttpServer()).post('/orders').send(dto);
 
       expect(res.status).toBe(409);
       expect(res.body).toHaveProperty('message');
@@ -207,20 +201,16 @@ describe('OrdersController (e2e)', () => {
     });
 
     it('should return 400 when items array is empty', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/orders')
-        .send({
-          userId: 103,
-          items: [],
-        });
+      const res = await request(app.getHttpServer()).post('/orders').send({
+        userId: 1,
+        items: [],
+      });
 
       expect(res.status).toBe(400);
     });
 
     it('should return 400 when required fields are missing', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/orders')
-        .send({});
+      const res = await request(app.getHttpServer()).post('/orders').send({});
 
       expect(res.status).toBe(400);
     });
@@ -235,7 +225,7 @@ describe('OrdersController (e2e)', () => {
       const createRes = await request(app.getHttpServer())
         .post('/orders')
         .send({
-          userId: 200,
+          userId: 1,
           items: [{ productId: 5, amount: 1, price: 4299 }],
         });
       expect(createRes.status).toBe(201);
@@ -253,7 +243,7 @@ describe('OrdersController (e2e)', () => {
       const createRes = await request(app.getHttpServer())
         .post('/orders')
         .send({
-          userId: 201,
+          userId: 1,
           items: [{ productId: 5, amount: 1, price: 4299 }],
         });
       const orderId = createRes.body.id;
@@ -270,7 +260,7 @@ describe('OrdersController (e2e)', () => {
       const createRes = await request(app.getHttpServer())
         .post('/orders')
         .send({
-          userId: 202,
+          userId: 1,
           items: [{ productId: 5, amount: 1, price: 4299 }],
         });
       const orderId = createRes.body.id;
@@ -289,7 +279,7 @@ describe('OrdersController (e2e)', () => {
       const createRes = await request(app.getHttpServer())
         .post('/orders')
         .send({
-          userId: 203,
+          userId: 1,
           items: [{ productId: 5, amount: 1, price: 4299 }],
         });
       const orderId = createRes.body.id;
@@ -325,7 +315,7 @@ describe('OrdersController (e2e)', () => {
       const createRes = await request(app.getHttpServer())
         .post('/orders')
         .send({
-          userId: 300,
+          userId: 1,
           items: [{ productId: 5, amount: 1, price: 4299 }],
         });
       const orderId = createRes.body.id;

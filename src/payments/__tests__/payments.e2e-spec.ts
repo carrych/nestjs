@@ -17,8 +17,16 @@
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { of } from 'rxjs';
 import request from 'supertest';
 import { AppModule } from '../../app.module';
+import { PAYMENTS_GRPC_CLIENT } from '../../orders/orders.constants';
+
+const mockPaymentsGrpcClient = {
+  getService: () => ({
+    authorize: () => of({ paymentId: 'mock-payment-id', status: 'PENDING' }),
+  }),
+};
 
 describe('PaymentsController (e2e)', () => {
   let app: INestApplication;
@@ -26,7 +34,10 @@ describe('PaymentsController (e2e)', () => {
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(PAYMENTS_GRPC_CLIENT)
+      .useValue(mockPaymentsGrpcClient)
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
@@ -42,7 +53,7 @@ describe('PaymentsController (e2e)', () => {
     const res = await request(app.getHttpServer())
       .post('/orders')
       .send({
-        userId: 500,
+        userId: 1,
         items: [{ productId: 5, amount: 1, price: 4299 }],
       });
     return Number(res.body.id);
@@ -84,9 +95,7 @@ describe('PaymentsController (e2e)', () => {
     });
 
     it('should filter payments by status', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/payments')
-        .query({ status: 'received' });
+      const res = await request(app.getHttpServer()).get('/payments').query({ status: 'received' });
 
       expect(res.status).toBe(200);
       for (const payment of res.body) {
@@ -129,7 +138,7 @@ describe('PaymentsController (e2e)', () => {
 
       const dto = {
         orderId,
-        userId: 500,
+        userId: 1,
         amount: 4299,
         method: 'bank_transfer',
         status: 'pending',
@@ -137,9 +146,7 @@ describe('PaymentsController (e2e)', () => {
         transactionNumber: 'TXN-E2E-001',
       };
 
-      const res = await request(app.getHttpServer())
-        .post('/payments')
-        .send(dto);
+      const res = await request(app.getHttpServer()).post('/payments').send(dto);
 
       expect(res.status).toBe(201);
       expect(res.body).toHaveProperty('id');
@@ -150,23 +157,19 @@ describe('PaymentsController (e2e)', () => {
     });
 
     it('should return 404 when orderId does not exist', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/payments')
-        .send({
-          orderId: 99999,
-          userId: 500,
-          amount: 1000,
-          method: 'cash',
-        });
+      const res = await request(app.getHttpServer()).post('/payments').send({
+        orderId: 99999,
+        userId: 1,
+        amount: 1000,
+        method: 'cash',
+      });
 
       expect(res.status).toBe(404);
       expect(res.body).toHaveProperty('message');
     });
 
     it('should return 400 when required fields are missing', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/payments')
-        .send({ userId: 500 });
+      const res = await request(app.getHttpServer()).post('/payments').send({ userId: 1 });
 
       expect(res.status).toBe(400);
     });
@@ -179,15 +182,13 @@ describe('PaymentsController (e2e)', () => {
     it('should update payment status', async () => {
       // Create a payment to update
       const orderId = await createTestOrder();
-      const createRes = await request(app.getHttpServer())
-        .post('/payments')
-        .send({
-          orderId,
-          userId: 500,
-          amount: 5000,
-          method: 'cash',
-          status: 'pending',
-        });
+      const createRes = await request(app.getHttpServer()).post('/payments').send({
+        orderId,
+        userId: 1,
+        amount: 5000,
+        method: 'cash',
+        status: 'pending',
+      });
       const paymentId = createRes.body.id;
 
       const res = await request(app.getHttpServer())
@@ -200,14 +201,12 @@ describe('PaymentsController (e2e)', () => {
 
     it('should update payment amount and method', async () => {
       const orderId = await createTestOrder();
-      const createRes = await request(app.getHttpServer())
-        .post('/payments')
-        .send({
-          orderId,
-          userId: 500,
-          amount: 1000,
-          method: 'cash',
-        });
+      const createRes = await request(app.getHttpServer()).post('/payments').send({
+        orderId,
+        userId: 1,
+        amount: 1000,
+        method: 'cash',
+      });
       const paymentId = createRes.body.id;
 
       const res = await request(app.getHttpServer())
@@ -234,14 +233,12 @@ describe('PaymentsController (e2e)', () => {
   describe('DELETE /payments/:id', () => {
     it('should delete a payment and return 204', async () => {
       const orderId = await createTestOrder();
-      const createRes = await request(app.getHttpServer())
-        .post('/payments')
-        .send({
-          orderId,
-          userId: 500,
-          amount: 100,
-          method: 'cash',
-        });
+      const createRes = await request(app.getHttpServer()).post('/payments').send({
+        orderId,
+        userId: 1,
+        amount: 100,
+        method: 'cash',
+      });
       const paymentId = createRes.body.id;
 
       const res = await request(app.getHttpServer()).delete(`/payments/${paymentId}`);

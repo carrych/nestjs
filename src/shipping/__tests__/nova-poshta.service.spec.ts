@@ -169,17 +169,17 @@ describe('NovaPoshtaService', () => {
     it('should throw when NP_API_KEY is not set', async () => {
       delete process.env.NP_API_KEY;
 
-      await expect(
-        service.trackShipment('123', '380501234567'),
-      ).rejects.toThrow('NP_API_KEY env variable is not set');
+      await expect(service.trackShipment('123', '380501234567')).rejects.toThrow(
+        'NP_API_KEY env variable is not set',
+      );
     });
 
     it('should throw on API HTTP error', async () => {
       mockApiResponse(null, false);
 
-      await expect(
-        service.trackShipment('123', '380501234567'),
-      ).rejects.toThrow('Nova Poshta API error');
+      await expect(service.trackShipment('123', '380501234567')).rejects.toThrow(
+        'Nova Poshta API error',
+      );
     });
   });
 });

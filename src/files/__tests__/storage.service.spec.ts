@@ -67,16 +67,16 @@ describe('StorageService', () => {
     });
 
     it('returns false on 404', async () => {
-      s3Mock.on(HeadObjectCommand).rejects(
-        Object.assign(new Error('Not Found'), { $metadata: { httpStatusCode: 404 } }),
-      );
+      s3Mock
+        .on(HeadObjectCommand)
+        .rejects(Object.assign(new Error('Not Found'), { $metadata: { httpStatusCode: 404 } }));
       await expect(service.objectExists('missing/key.jpg')).resolves.toBe(false);
     });
 
     it('rethrows non-404 errors', async () => {
-      s3Mock.on(HeadObjectCommand).rejects(
-        Object.assign(new Error('Server Error'), { $metadata: { httpStatusCode: 500 } }),
-      );
+      s3Mock
+        .on(HeadObjectCommand)
+        .rejects(Object.assign(new Error('Server Error'), { $metadata: { httpStatusCode: 500 } }));
       await expect(service.objectExists('some/key.jpg')).rejects.toThrow('Server Error');
     });
   });

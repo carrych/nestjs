@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ShippingStatus } from '../enums/shipping-status.enum';
 import {
   CreateShipmentInput,
+  IDeliveryService,
   ShipmentResult,
   TrackingResult,
 } from '../interfaces/delivery-service.interface';
@@ -23,7 +24,7 @@ const UK_STATUS_MAP: Record<number, ShippingStatus> = {
 };
 
 @Injectable()
-export class UkrPoshtaService {
+export class UkrPoshtaService implements IDeliveryService {
   private readonly logger = new Logger(UkrPoshtaService.name);
   private readonly baseUrl = 'https://dev.ukrposhta.ua/ecom/0.0.1/';
   private readonly trackingUrl = 'https://dev.ukrposhta.ua/status-traking/0.0.1/';
@@ -95,9 +96,7 @@ export class UkrPoshtaService {
     };
   }
 
-  async trackShipment(
-    trackingNumber: string,
-  ): Promise<TrackingResult> {
+  async trackShipment(trackingNumber: string, _phone?: string): Promise<TrackingResult> {
     try {
       const statusData = await this.request(
         `statuses/last?barcode=${trackingNumber}`,
@@ -128,12 +127,7 @@ export class UkrPoshtaService {
 
   // ────────────────── Private helpers ──────────────────
 
-  private async request(
-    path: string,
-    method: string,
-    body?: unknown,
-    baseUrl?: string,
-  ) {
+  private async request(path: string, method: string, body?: unknown, baseUrl?: string) {
     const url = `${baseUrl || this.baseUrl}${path}?token=${this.token}`;
 
     const options: RequestInit = {

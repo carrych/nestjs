@@ -6,6 +6,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { Readable } from 'stream';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 @Injectable()
@@ -58,6 +59,12 @@ export class StorageService {
       if (status === 404) return false;
       throw err;
     }
+  }
+
+  async putObject(key: string, body: Buffer | Readable, contentType: string): Promise<void> {
+    await this.client.send(
+      new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType }),
+    );
   }
 
   async deleteObject(key: string): Promise<void> {

@@ -14,10 +14,7 @@ describe('OrdersResolver', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        OrdersResolver,
-        { provide: OrdersService, useValue: ordersService },
-      ],
+      providers: [OrdersResolver, { provide: OrdersService, useValue: ordersService }],
     }).compile();
 
     resolver = module.get<OrdersResolver>(OrdersResolver);

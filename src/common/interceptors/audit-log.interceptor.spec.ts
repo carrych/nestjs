@@ -1,9 +1,10 @@
 import { CallHandler, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { of, lastValueFrom } from 'rxjs';
+import { of, lastValueFrom, throwError } from 'rxjs';
 
 import { AuditLogInterceptor } from './audit-log.interceptor';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
+import { AuditOutcome } from '../../audit-logs/entities/audit-log.entity';
 import { UserRole } from '../../user/enums/user-role.enum';
 
 const MOCK_USER = { id: 1, email: 'user@example.com', role: UserRole.USER };
@@ -15,6 +16,7 @@ function makeContext(opts: {
   body?: Record<string, unknown>;
   user?: object | null;
   skipMetadata?: boolean;
+  requestId?: string;
 }): ExecutionContext {
   const {
     method = 'POST',
@@ -23,6 +25,7 @@ function makeContext(opts: {
     body = {},
     user = MOCK_USER,
     skipMetadata = false,
+    requestId,
   } = opts;
 
   const reflectorMock = (context: ExecutionContext['getHandler'] | ExecutionContext['getClass']) =>
@@ -42,6 +45,8 @@ function makeContext(opts: {
         body,
         query: {},
         ip: '127.0.0.1',
+        headers: { 'user-agent': 'jest-test/1.0' },
+        requestId,
         user,
       }),
     }),
@@ -51,6 +56,10 @@ function makeContext(opts: {
 
 function makeHandler(response: unknown = { ok: true }): CallHandler {
   return { handle: () => of(response) };
+}
+
+function makeThrowingHandler(error = new Error('handler error')): CallHandler {
+  return { handle: () => throwError(() => error) };
 }
 
 describe('AuditLogInterceptor', () => {
@@ -167,9 +176,7 @@ describe('AuditLogInterceptor', () => {
     const ctx = makeContext({ method: 'POST', routePath: '/products', user: null });
     await lastValueFrom(interceptor.intercept(ctx, makeHandler()));
 
-    expect(logSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: null, role: null }),
-    );
+    expect(logSpy).toHaveBeenCalledWith(expect.objectContaining({ userId: null, role: null }));
   });
 
   // ─── Sanitization ─────────────────────────────────────────────────────────
@@ -224,5 +231,51 @@ describe('AuditLogInterceptor', () => {
     await lastValueFrom(interceptor.intercept(ctx, makeHandler()));
 
     expect(logSpy).toHaveBeenCalledWith(expect.objectContaining({ ip: '127.0.0.1' }));
+  });
+
+  // ─── Outcome ──────────────────────────────────────────────────────────────
+
+  it('records outcome SUCCESS on a successful request', async () => {
+    const ctx = makeContext({ method: 'POST', routePath: '/products' });
+    await lastValueFrom(interceptor.intercept(ctx, makeHandler()));
+
+    expect(logSpy).toHaveBeenCalledWith(expect.objectContaining({ outcome: AuditOutcome.SUCCESS }));
+  });
+
+  it('records outcome FAILURE when handler throws, and rethrows the error', async () => {
+    const ctx = makeContext({ method: 'POST', routePath: '/products' });
+
+    await expect(lastValueFrom(interceptor.intercept(ctx, makeThrowingHandler()))).rejects.toThrow(
+      'handler error',
+    );
+
+    expect(logSpy).toHaveBeenCalledWith(expect.objectContaining({ outcome: AuditOutcome.FAILURE }));
+  });
+
+  // ─── Correlation ID ───────────────────────────────────────────────────────
+
+  it('captures correlationId from req.requestId', async () => {
+    const ctx = makeContext({ method: 'POST', routePath: '/products', requestId: 'trace-abc-123' });
+    await lastValueFrom(interceptor.intercept(ctx, makeHandler()));
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ correlationId: 'trace-abc-123' }),
+    );
+  });
+
+  it('correlationId is null when req.requestId is not set', async () => {
+    const ctx = makeContext({ method: 'POST', routePath: '/products' });
+    await lastValueFrom(interceptor.intercept(ctx, makeHandler()));
+
+    expect(logSpy).toHaveBeenCalledWith(expect.objectContaining({ correlationId: null }));
+  });
+
+  // ─── User-Agent ───────────────────────────────────────────────────────────
+
+  it('captures userAgent from req.headers', async () => {
+    const ctx = makeContext({ method: 'POST', routePath: '/products' });
+    await lastValueFrom(interceptor.intercept(ctx, makeHandler()));
+
+    expect(logSpy).toHaveBeenCalledWith(expect.objectContaining({ userAgent: 'jest-test/1.0' }));
   });
 });

@@ -74,11 +74,10 @@ export class ProductsService {
 
     let imageUrl: string | null = null;
     if (product.imageFileId) {
-      const [row] = await this.productRepository.query(
-        `SELECT key FROM files WHERE id = $1`,
-        [product.imageFileId],
-      );
-      if (row) imageUrl = this.storageService.getViewUrl(row.key as string);
+      const [row] = await this.productRepository.query(`SELECT key FROM files WHERE id = $1`, [
+        product.imageFileId,
+      ]);
+      if (row) imageUrl = this.storageService.getViewUrl(row.key);
     }
 
     return { ...product, imageUrl };

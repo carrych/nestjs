@@ -36,10 +36,7 @@ import { OutboxService } from '../outbox/outbox.service';
 import { ProcessedMessage } from '../idempotency/processed-message.entity';
 import { OrdersProcessMessage } from './orders-queue.types';
 import { PAYMENTS_GRPC_CLIENT } from './orders.constants';
-import type {
-  AuthorizeResponse,
-  PaymentsGrpcClient,
-} from './payments-grpc-client.interfaces';
+import type { AuthorizeResponse, PaymentsGrpcClient } from './payments-grpc-client.interfaces';
 
 // Valid status transitions: from → [allowed targets]
 const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -67,7 +64,7 @@ export class OrdersService implements OnModuleInit {
     private readonly outboxService: OutboxService,
     @Inject(PAYMENTS_GRPC_CLIENT) grpcClient: any,
   ) {
-    this.grpcClient = grpcClient;
+    this.grpcClient = grpcClient as ClientGrpc;
   }
 
   onModuleInit() {
@@ -82,6 +79,7 @@ export class OrdersService implements OnModuleInit {
    */
   async create(
     dto: CreateOrderDto,
+    correlationId?: string,
   ): Promise<{ order: Order; created: boolean; payment: AuthorizeResponse | null }> {
     // 1. Idempotency check: return existing order if key already used
     if (dto.idempotencyKey) {
@@ -99,6 +97,7 @@ export class OrdersService implements OnModuleInit {
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
+    let committed = false;
     try {
       const productIds = dto.items.map((item) => item.productId);
 
@@ -111,17 +110,13 @@ export class OrdersService implements OnModuleInit {
         .setLock('pessimistic_write')
         .getMany();
 
-      const stockByProductId = new Map(
-        lockedStocks.map((s) => [Number(s.productId), s]),
-      );
+      const stockByProductId = new Map(lockedStocks.map((s) => [Number(s.productId), s]));
 
       // 4. Validate stock availability: (stock - reserved) >= requested amount
       for (const item of dto.items) {
         const stock = stockByProductId.get(item.productId);
         if (!stock) {
-          throw new ConflictException(
-            `No stock record for product #${item.productId}`,
-          );
+          throw new ConflictException(`No stock record for product #${item.productId}`);
         }
 
         const available = stock.stock - stock.reserved;
@@ -151,9 +146,7 @@ export class OrdersService implements OnModuleInit {
           discount: String(item.discount ?? 0),
         }),
       );
-      savedOrder.items = await queryRunner.manager
-        .getRepository(OrderItem)
-        .save(orderItems);
+      savedOrder.items = await queryRunner.manager.getRepository(OrderItem).save(orderItems);
 
       // 7. Update stock: reserved += item.amount
       for (const item of dto.items) {
@@ -164,6 +157,7 @@ export class OrdersService implements OnModuleInit {
 
       // 8. Commit
       await queryRunner.commitTransaction();
+      committed = true;
       this.logger.log(`Order #${savedOrder.id} created (key: ${dto.idempotencyKey})`);
 
       // 9. Publish to queue (fire-and-forget — does not block the API response)
@@ -176,24 +170,33 @@ export class OrdersService implements OnModuleInit {
         messageId: message.messageId,
       });
 
+      // Notify WS clients: order created
+      this.rabbitmqService.publishStatusChange({
+        entity: 'order',
+        entityId: savedOrder.id,
+        orderId: savedOrder.id,
+        userId: savedOrder.userId,
+        status: savedOrder.status,
+        updatedAt: new Date().toISOString(),
+        correlationId,
+      });
+
       // 10. Authorize payment via gRPC (after commit to avoid holding DB transaction)
       const totalAmount = dto.items
         .reduce((sum, item) => sum + Number(item.price) * item.amount, 0)
         .toFixed(2);
-      const payment = await this.authorizePayment(
-        savedOrder.id,
-        totalAmount,
-        dto.idempotencyKey,
-      );
+      const payment = await this.authorizePayment(savedOrder.id, totalAmount, dto.idempotencyKey);
 
       return { order: savedOrder, created: true, payment };
     } catch (error) {
-      await queryRunner.rollbackTransaction();
+      if (!committed) {
+        await queryRunner.rollbackTransaction();
+      }
 
       // Handle race condition: another request inserted the same idempotencyKey
       if (
         error instanceof QueryFailedError &&
-        (error as any).code === '23505' &&
+        (error as { code?: string }).code === '23505' &&
         dto.idempotencyKey
       ) {
         const existing = await this.orderRepository.findOne({
@@ -241,9 +244,12 @@ export class OrdersService implements OnModuleInit {
         `Payment authorized (orderId=${orderId}, paymentId=${response.paymentId}, status=${response.status})`,
       );
       return response;
-    } catch (err: any) {
-      const code = err?.code;
-      this.logger.error(`Payments.Authorize failed (orderId=${orderId}): ${err?.message}`);
+    } catch (err: unknown) {
+      const grpcErr = err as { code?: number; message?: string };
+      const code = grpcErr?.code;
+      this.logger.error(
+        `Payments.Authorize failed (orderId=${orderId}): ${String(grpcErr?.message ?? '')}`,
+      );
 
       if (code === GrpcStatus.DEADLINE_EXCEEDED) {
         throw new GatewayTimeoutException('Payment service timed out');
@@ -263,8 +269,8 @@ export class OrdersService implements OnModuleInit {
           messageId: message.messageId,
           idempotencyKey: null,
         });
-      } catch (err: any) {
-        if (String(err?.code) === '23505') {
+      } catch (err: unknown) {
+        if (String((err as { code?: string }).code) === '23505') {
           return; // Already processed — idempotent skip
         }
         throw err;
@@ -289,29 +295,55 @@ export class OrdersService implements OnModuleInit {
   }
 
   async findAll(query: QueryOrderDto): Promise<Order[]> {
-    const where = this.buildWhere(query);
-    const { limit = 10, offset = 0 } = query;
+    const { limit = 10, offset = 0, status, userId, dateFrom, dateTo } = query;
 
-    return this.orderRepository.find({
-      where,
-      relations: { items: true },
-      skip: offset,
-      take: limit,
-      order: { createdAt: 'DESC' },
-    });
+    const qb = this.orderRepository
+      .createQueryBuilder('order')
+      .select([
+        'order.id',
+        'order.orderNumber',
+        'order.status',
+        'order.userId',
+        'order.addressId',
+        'order.idempotencyKey',
+        'order.createdAt',
+      ])
+      .orderBy('order.createdAt', 'DESC')
+      .skip(offset)
+      .take(limit);
+
+    if (status) qb.andWhere('order.status = :status', { status });
+    if (userId) qb.andWhere('order.userId = :userId', { userId });
+    if (dateFrom) qb.andWhere('order.createdAt >= :dateFrom', { dateFrom: new Date(dateFrom) });
+    if (dateTo) qb.andWhere('order.createdAt <= :dateTo', { dateTo: new Date(dateTo) });
+
+    return qb.getMany();
   }
 
   async findAllWithCount(query: QueryOrderDto): Promise<[Order[], number]> {
-    const where = this.buildWhere(query);
-    const { limit = 10, offset = 0 } = query;
+    const { limit = 10, offset = 0, status, userId, dateFrom, dateTo } = query;
 
-    return this.orderRepository.findAndCount({
-      where,
-      relations: { items: true },
-      skip: offset,
-      take: limit,
-      order: { createdAt: 'DESC' },
-    });
+    const qb = this.orderRepository
+      .createQueryBuilder('order')
+      .select([
+        'order.id',
+        'order.orderNumber',
+        'order.status',
+        'order.userId',
+        'order.addressId',
+        'order.idempotencyKey',
+        'order.createdAt',
+      ])
+      .orderBy('order.createdAt', 'DESC')
+      .skip(offset)
+      .take(limit);
+
+    if (status) qb.andWhere('order.status = :status', { status });
+    if (userId) qb.andWhere('order.userId = :userId', { userId });
+    if (dateFrom) qb.andWhere('order.createdAt >= :dateFrom', { dateFrom: new Date(dateFrom) });
+    if (dateTo) qb.andWhere('order.createdAt <= :dateTo', { dateTo: new Date(dateTo) });
+
+    return qb.getManyAndCount();
   }
 
   private buildWhere(query: QueryOrderDto): Record<string, unknown> {
@@ -342,9 +374,7 @@ export class OrdersService implements OnModuleInit {
     const allowed = STATUS_TRANSITIONS[order.status];
 
     if (!allowed.includes(dto.status)) {
-      throw new BadRequestException(
-        `Cannot transition from '${order.status}' to '${dto.status}'`,
-      );
+      throw new BadRequestException(`Cannot transition from '${order.status}' to '${dto.status}'`);
     }
 
     order.status = dto.status;
