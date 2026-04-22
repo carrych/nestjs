@@ -1,6 +1,5 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ClientProxy } from '@nestjs/microservices';
 import { Repository } from 'typeorm';
 
 import { Shipping } from './entities/shipping.entity';
@@ -9,7 +8,6 @@ import { CreateShippingDto } from './dto/create-shipping.dto';
 import { UpdateShippingDto } from './dto/update-shipping.dto';
 import { ShippingStatus } from './enums/shipping-status.enum';
 import { RabbitmqService } from '../rabbitmq/rabbitmq.service';
-import { INVOICE_SERVICE } from '../invoices-client/invoices-client.module';
 
 @Injectable()
 export class ShippingService {
@@ -21,10 +19,9 @@ export class ShippingService {
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
     private readonly rabbitmqService: RabbitmqService,
-    @Inject(INVOICE_SERVICE) private readonly invoiceClient: ClientProxy,
   ) {}
 
-  async create(dto: CreateShippingDto): Promise<Shipping> {
+  async create(dto: CreateShippingDto, correlationId?: string): Promise<Shipping> {
     const order = await this.orderRepository.findOne({
       where: { id: dto.orderId },
       relations: { items: true },
@@ -47,26 +44,22 @@ export class ShippingService {
 
     const saved = await this.shippingRepository.save(shipping);
 
-    // Fire-and-forget: create invoice for this shipping
-    this.invoiceClient
-      .send(
-        { cmd: 'invoice.create' },
-        {
-          orderId: order.id,
-          userId: dto.userId,
-          type: 'sales',
-          items: order.items.map((item) => ({
-            productId: Number(item.productId),
-            quantity: item.amount,
-            price: Number(item.price),
-            discount: Number(item.discount),
-          })),
-        },
-      )
-      .subscribe({
-        error: (err: Error) =>
-          this.logger.error('Failed to create invoice for shipping', err?.stack),
+    try {
+      this.rabbitmqService.publishToQueue('invoices_queue', {
+        orderId: order.id,
+        userId: dto.userId,
+        type: 'sales',
+        correlationId,
+        items: order.items.map((item) => ({
+          productId: Number(item.productId),
+          quantity: item.amount,
+          price: Number(item.price),
+          discount: Number(item.discount),
+        })),
       });
+    } catch (err) {
+      this.logger.error('Failed to enqueue invoice creation', (err as Error)?.stack);
+    }
 
     return saved;
   }
@@ -106,7 +99,7 @@ export class ShippingService {
     return shipping;
   }
 
-  async update(id: number, dto: UpdateShippingDto): Promise<Shipping> {
+  async update(id: number, dto: UpdateShippingDto, correlationId?: string): Promise<Shipping> {
     const shipping = await this.findOne(id);
     const prevStatus = shipping.status;
 
@@ -136,8 +129,10 @@ export class ShippingService {
         entity: 'shipping',
         entityId: updated.id,
         orderId: Number(updated.orderId),
+        userId: updated.userId,
         status: updated.status,
         updatedAt: new Date().toISOString(),
+        correlationId,
       });
     }
 

@@ -6,12 +6,13 @@ import * as amqp from 'amqplib';
 export type RabbitConsumeHandler = (msg: ConsumeMessage, channel: Channel) => Promise<void>;
 
 export interface StatusChangeEvent {
-  entity: 'payment' | 'shipping' | 'invoice';
+  entity: 'payment' | 'shipping' | 'invoice' | 'order';
   entityId: number | string;
   orderId: number;
+  userId: number;
   status: string;
   updatedAt: string;
-  // Only present for invoice events
+  correlationId?: string;
   documentUrl?: string;
   qrCodeDataUrl?: string;
 }
@@ -75,13 +76,16 @@ export class RabbitmqService implements OnModuleInit, OnModuleDestroy {
     await ch.assertQueue('orders.process', { durable: true });
     await ch.assertQueue('orders.dlq', { durable: true });
     await ch.assertQueue('status.changes', { durable: true });
+    await ch.assertQueue('ws.notifications', { durable: true });
+    await ch.assertQueue('invoices_queue', { durable: true });
   }
 
   publishStatusChange(event: StatusChangeEvent): void {
     try {
       this.publishToQueue('status.changes', event);
+      this.publishToQueue('ws.notifications', event);
     } catch (err) {
-      this.logger.error('Failed to publish status.changes event', (err as Error)?.stack);
+      this.logger.error('Failed to publish status event', (err as Error)?.stack);
     }
   }
 

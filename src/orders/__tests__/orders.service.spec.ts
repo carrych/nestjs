@@ -113,7 +113,7 @@ describe('OrdersService', () => {
     save: jest.Mock;
     remove: jest.Mock;
   };
-  let rabbitmqService: { publishToQueue: jest.Mock };
+  let rabbitmqService: { publishToQueue: jest.Mock; publishStatusChange: jest.Mock };
   let outboxService: { add: jest.Mock };
   let dataSource: { createQueryRunner: jest.Mock; transaction: jest.Mock };
   let grpcService: { authorize: jest.Mock };
@@ -132,7 +132,10 @@ describe('OrdersService', () => {
       remove: jest.fn(),
     };
 
-    rabbitmqService = { publishToQueue: jest.fn().mockReturnValue(true) };
+    rabbitmqService = {
+      publishToQueue: jest.fn().mockReturnValue(true),
+      publishStatusChange: jest.fn(),
+    };
     outboxService = { add: jest.fn().mockResolvedValue(undefined) };
 
     dataSource = {

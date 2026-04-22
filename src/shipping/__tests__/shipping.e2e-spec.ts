@@ -23,15 +23,12 @@ import { of } from 'rxjs';
 import request from 'supertest';
 import { AppModule } from '../../app.module';
 import { PAYMENTS_GRPC_CLIENT } from '../../orders/orders.constants';
-import { INVOICE_SERVICE } from '../../invoices-client/invoices-client.module';
 
 const mockPaymentsGrpcClient = {
   getService: () => ({
     authorize: () => of({ paymentId: 'mock-payment-id', status: 'PENDING' }),
   }),
 };
-
-const mockInvoiceClient = { send: () => of(null), emit: () => of(null) };
 
 describe('ShippingController (e2e)', () => {
   let app: INestApplication;
@@ -42,8 +39,6 @@ describe('ShippingController (e2e)', () => {
     })
       .overrideProvider(PAYMENTS_GRPC_CLIENT)
       .useValue(mockPaymentsGrpcClient)
-      .overrideProvider(INVOICE_SERVICE)
-      .useValue(mockInvoiceClient)
       .compile();
 
     app = moduleFixture.createNestApplication();

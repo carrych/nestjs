@@ -12,8 +12,11 @@ import {
   Patch,
   Post,
   Query,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { ClientGrpc } from '@nestjs/microservices';
+import { Throttle } from '@nestjs/throttler';
 import { Observable } from 'rxjs';
 
 import { PaymentsService } from './payments.service';
@@ -40,6 +43,8 @@ interface PaymentsGrpcService {
 
   getPaymentStatus(data: { paymentId: string }): Observable<{ paymentId: string; status: string }>;
 }
+
+type RequestWithId = Request & { requestId?: string };
 
 @Controller('payments')
 export class PaymentsController implements OnModuleInit {
@@ -73,8 +78,12 @@ export class PaymentsController implements OnModuleInit {
   }
 
   @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePaymentDto) {
-    return this.paymentsService.update(id, dto);
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdatePaymentDto,
+    @Req() req: RequestWithId,
+  ) {
+    return this.paymentsService.update(id, dto, req.requestId);
   }
 
   @Delete(':id')
@@ -86,6 +95,7 @@ export class PaymentsController implements OnModuleInit {
   // ── gRPC payment lifecycle (routes through payments-grpc service) ──
 
   /** Authorize a payment — creates a pending payment record via gRPC microservice */
+  @Throttle({ strict: { limit: 5, ttl: 60_000 } })
   @Post('authorize')
   @HttpCode(HttpStatus.CREATED)
   authorize(
@@ -106,12 +116,14 @@ export class PaymentsController implements OnModuleInit {
   }
 
   /** Capture an authorized payment — updates status to received via gRPC */
+  @Throttle({ strict: { limit: 5, ttl: 60_000 } })
   @Post(':paymentId/capture')
   capture(@Param('paymentId') paymentId: string) {
     return this.grpcPayments.capture({ paymentId });
   }
 
   /** Refund a payment — creates OUT payment record via gRPC */
+  @Throttle({ strict: { limit: 5, ttl: 60_000 } })
   @Post(':paymentId/refund')
   refund(@Param('paymentId') paymentId: string, @Body() body: { amount: string }) {
     return this.grpcPayments.refund({ paymentId, amount: body.amount });

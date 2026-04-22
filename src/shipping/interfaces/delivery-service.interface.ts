@@ -2,6 +2,11 @@ import { ShippingStatus } from '../enums/shipping-status.enum';
 
 export type DeliveryPayer = 'sender' | 'recipient';
 
+export interface IDeliveryService {
+  createShipment(input: CreateShipmentInput): Promise<ShipmentResult>;
+  trackShipment(trackingNumber: string, phone?: string): Promise<TrackingResult>;
+}
+
 export interface CreateShipmentInput {
   weight: number;
   seatsCount: number;

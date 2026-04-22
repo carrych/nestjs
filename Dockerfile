@@ -117,6 +117,18 @@ CMD ["node", "dist/src/payments-grpc/main.js"]
 
 
 # ═══════════════════════════════════════════════════════════════════
+# Stage: ws-service — same prod image, runs the WebSocket gateway
+# Shares all compiled code with prod; only CMD and EXPOSE differ.
+# Deploy as a separate container to scale WS connections independently.
+# ═══════════════════════════════════════════════════════════════════
+FROM prod AS ws-service
+
+EXPOSE 3002
+
+CMD ["node", "dist/src/events/main.js"]
+
+
+# ═══════════════════════════════════════════════════════════════════
 # Stage: prod-distroless — minimal distroless runtime
 # Base: gcr.io/distroless/nodejs22-debian12:nonroot
 #   - No shell (sh, bash, ash)
