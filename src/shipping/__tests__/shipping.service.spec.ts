@@ -1,14 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException } from '@nestjs/common';
-import { of, throwError } from 'rxjs';
 
 import { ShippingService } from '../shipping.service';
 import { Shipping } from '../entities/shipping.entity';
 import { Order } from '../../orders/entities/order.entity';
 import { ShippingStatus } from '../enums/shipping-status.enum';
 import { RabbitmqService } from '../../rabbitmq/rabbitmq.service';
-import { INVOICE_SERVICE } from '../../invoices-client/invoices-client.module';
 
 const mockShippingRepo = {
   create: jest.fn(),
@@ -25,10 +23,7 @@ const mockOrderRepo = {
 
 const mockRabbitmqService = {
   publishStatusChange: jest.fn(),
-};
-
-const mockInvoiceClient = {
-  send: jest.fn(),
+  publishToQueue: jest.fn(),
 };
 
 function makeShipping(overrides: Partial<Shipping> = {}): Shipping {
@@ -60,7 +55,6 @@ describe('ShippingService', () => {
         { provide: getRepositoryToken(Shipping), useValue: mockShippingRepo },
         { provide: getRepositoryToken(Order), useValue: mockOrderRepo },
         { provide: RabbitmqService, useValue: mockRabbitmqService },
-        { provide: INVOICE_SERVICE, useValue: mockInvoiceClient },
       ],
     }).compile();
 
@@ -83,13 +77,12 @@ describe('ShippingService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('saves shipping and fires invoice creation', async () => {
+    it('saves shipping and enqueues invoice creation', async () => {
       const order = { id: 10, items: [{ productId: 1, amount: 2, price: '150', discount: '10' }] };
       mockOrderRepo.findOne.mockResolvedValue(order);
       const shipping = makeShipping();
       mockShippingRepo.create.mockReturnValue(shipping);
       mockShippingRepo.save.mockResolvedValue(shipping);
-      mockInvoiceClient.send.mockReturnValue(of({ id: 1 }));
 
       const result = await service.create({
         orderId: 10,
@@ -99,19 +92,21 @@ describe('ShippingService', () => {
       });
 
       expect(result).toEqual(shipping);
-      expect(mockInvoiceClient.send).toHaveBeenCalledWith(
-        { cmd: 'invoice.create' },
+      expect(mockRabbitmqService.publishToQueue).toHaveBeenCalledWith(
+        'invoices_queue',
         expect.objectContaining({ orderId: 10, userId: 5, type: 'sales' }),
       );
     });
 
-    it('does not throw if invoice client errors', async () => {
+    it('does not throw if queue publish fails', async () => {
       const order = { id: 10, items: [] };
       mockOrderRepo.findOne.mockResolvedValue(order);
       const shipping = makeShipping();
       mockShippingRepo.create.mockReturnValue(shipping);
       mockShippingRepo.save.mockResolvedValue(shipping);
-      mockInvoiceClient.send.mockReturnValue(throwError(() => new Error('RMQ down')));
+      mockRabbitmqService.publishToQueue.mockImplementation(() => {
+        throw new Error('channel not ready');
+      });
 
       await expect(
         service.create({
