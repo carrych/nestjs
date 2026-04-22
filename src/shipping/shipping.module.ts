@@ -8,10 +8,9 @@ import { ShippingController } from './shipping.controller';
 import { DeliveryServiceFactory } from './services/delivery-service.factory';
 import { NovaPoshtaService } from './services/nova-poshta.service';
 import { UkrPoshtaService } from './services/ukr-poshta.service';
-import { InvoicesClientModule } from '../invoices-client/invoices-client.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Shipping, Order]), InvoicesClientModule],
+  imports: [TypeOrmModule.forFeature([Shipping, Order])],
   controllers: [ShippingController],
   providers: [ShippingService, NovaPoshtaService, UkrPoshtaService, DeliveryServiceFactory],
   exports: [ShippingService, NovaPoshtaService, UkrPoshtaService, DeliveryServiceFactory],
