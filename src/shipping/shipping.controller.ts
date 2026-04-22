@@ -10,11 +10,15 @@ import {
   Patch,
   Post,
   Query,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 
 import { ShippingService } from './shipping.service';
 import { CreateShippingDto } from './dto/create-shipping.dto';
 import { UpdateShippingDto } from './dto/update-shipping.dto';
+
+type RequestWithId = Request & { requestId?: string };
 
 @Controller('shipping')
 export class ShippingController {
@@ -22,8 +26,8 @@ export class ShippingController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() dto: CreateShippingDto) {
-    return this.shippingService.create(dto);
+  create(@Body() dto: CreateShippingDto, @Req() req: RequestWithId) {
+    return this.shippingService.create(dto, req.requestId);
   }
 
   @Get()
@@ -37,8 +41,12 @@ export class ShippingController {
   }
 
   @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateShippingDto) {
-    return this.shippingService.update(id, dto);
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateShippingDto,
+    @Req() req: RequestWithId,
+  ) {
+    return this.shippingService.update(id, dto, req.requestId);
   }
 
   @Delete(':id')

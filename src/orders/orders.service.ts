@@ -79,6 +79,7 @@ export class OrdersService implements OnModuleInit {
    */
   async create(
     dto: CreateOrderDto,
+    correlationId?: string,
   ): Promise<{ order: Order; created: boolean; payment: AuthorizeResponse | null }> {
     // 1. Idempotency check: return existing order if key already used
     if (dto.idempotencyKey) {
@@ -167,6 +168,17 @@ export class OrdersService implements OnModuleInit {
       };
       this.rabbitmqService.publishToQueue('orders.process', message, {
         messageId: message.messageId,
+      });
+
+      // Notify WS clients: order created
+      this.rabbitmqService.publishStatusChange({
+        entity: 'order',
+        entityId: savedOrder.id,
+        orderId: savedOrder.id,
+        userId: savedOrder.userId,
+        status: savedOrder.status,
+        updatedAt: new Date().toISOString(),
+        correlationId,
       });
 
       // 10. Authorize payment via gRPC (after commit to avoid holding DB transaction)

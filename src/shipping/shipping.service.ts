@@ -24,7 +24,7 @@ export class ShippingService {
     @Inject(INVOICE_SERVICE) private readonly invoiceClient: ClientProxy,
   ) {}
 
-  async create(dto: CreateShippingDto): Promise<Shipping> {
+  async create(dto: CreateShippingDto, correlationId?: string): Promise<Shipping> {
     const order = await this.orderRepository.findOne({
       where: { id: dto.orderId },
       relations: { items: true },
@@ -55,6 +55,7 @@ export class ShippingService {
           orderId: order.id,
           userId: dto.userId,
           type: 'sales',
+          correlationId,
           items: order.items.map((item) => ({
             productId: Number(item.productId),
             quantity: item.amount,
@@ -106,7 +107,7 @@ export class ShippingService {
     return shipping;
   }
 
-  async update(id: number, dto: UpdateShippingDto): Promise<Shipping> {
+  async update(id: number, dto: UpdateShippingDto, correlationId?: string): Promise<Shipping> {
     const shipping = await this.findOne(id);
     const prevStatus = shipping.status;
 
@@ -136,8 +137,10 @@ export class ShippingService {
         entity: 'shipping',
         entityId: updated.id,
         orderId: Number(updated.orderId),
+        userId: updated.userId,
         status: updated.status,
         updatedAt: new Date().toISOString(),
+        correlationId,
       });
     }
 

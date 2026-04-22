@@ -12,7 +12,9 @@ import {
   Patch,
   Post,
   Query,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { ClientGrpc } from '@nestjs/microservices';
 import { Throttle } from '@nestjs/throttler';
 import { Observable } from 'rxjs';
@@ -41,6 +43,8 @@ interface PaymentsGrpcService {
 
   getPaymentStatus(data: { paymentId: string }): Observable<{ paymentId: string; status: string }>;
 }
+
+type RequestWithId = Request & { requestId?: string };
 
 @Controller('payments')
 export class PaymentsController implements OnModuleInit {
@@ -74,8 +78,12 @@ export class PaymentsController implements OnModuleInit {
   }
 
   @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePaymentDto) {
-    return this.paymentsService.update(id, dto);
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdatePaymentDto,
+    @Req() req: RequestWithId,
+  ) {
+    return this.paymentsService.update(id, dto, req.requestId);
   }
 
   @Delete(':id')

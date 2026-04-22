@@ -87,7 +87,7 @@ export class PaymentsService {
     return payment;
   }
 
-  async update(id: number, dto: UpdatePaymentDto): Promise<Payment> {
+  async update(id: number, dto: UpdatePaymentDto, correlationId?: string): Promise<Payment> {
     const payment = await this.findOne(id);
     const prevStatus = payment.status;
 
@@ -108,8 +108,10 @@ export class PaymentsService {
         entity: 'payment',
         entityId: updated.id,
         orderId: Number(updated.orderId),
+        userId: updated.userId,
         status: updated.status,
         updatedAt: new Date().toISOString(),
+        correlationId,
       });
     }
 
