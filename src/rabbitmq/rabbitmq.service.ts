@@ -77,6 +77,7 @@ export class RabbitmqService implements OnModuleInit, OnModuleDestroy {
     await ch.assertQueue('orders.dlq', { durable: true });
     await ch.assertQueue('status.changes', { durable: true });
     await ch.assertQueue('ws.notifications', { durable: true });
+    await ch.assertQueue('invoices_queue', { durable: true });
   }
 
   publishStatusChange(event: StatusChangeEvent): void {
